@@ -56,14 +56,18 @@ BUG: Spinning up a second site results in EADDRINUSE.
      Because port is hardcoded into the shell script.
      
 
+PRB: Use fork process to trigger/end promises?
+    * nc-start.js can be rewritten using `process.send` to send parameters rather 
+          than passing arguments ala `nc.js`.
+      --  Should it also be an asynch function?
+      --  And return a confirmation to resolve the promise after the shell runs?
+
 
 
 #### MEXT 2020-07-19
-* nc-start.js can be rewritten using `process.send` to send parameters rather 
-      than passing arguments ala `nc.js`.
-  --  Should it also be an asynch function?
-  --  And return a confirmation to resolve the promise after the shell runs?
 * Return a promise when the app is actually created?  Is that even possible?
+  -- nc-start.js script stops at nc.js.  So the promise is not resolved.
+  
 * How to handle startup
   --  Any new graph is going to take a minute to start up, unless...
       --  Is it possible to run precompiled versions? So only the db load is slow?

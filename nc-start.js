@@ -13,6 +13,7 @@
 
 const shell = require("shelljs");
 
+console.log("### nc-start.js: Init.");
 
 // Read Arguments
 let argv = require("minimist")(process.argv.slice(2));
@@ -36,6 +37,12 @@ if (googlea) {
   googleaDef = ` --googlea=${googlea}`;
 }
 
-
-shell.cd('netcreate-2018/build');
-shell.exec(`./nc.js --dataset=${dataset} --port=${port}${netportDef}${ipDef}${googleaDef}`);
+process.on('message', data => {
+  console.log('### nc-start.js: Starting nc.js script.')
+  shell.cd("netcreate-2018/build");
+  shell.exec(
+    `./nc.js --dataset=${dataset} --port=${port}${netportDef}${ipDef}${googleaDef}`
+  );
+  console.log("### nc-start.js: nc.js started.");
+  process.send('nc-start.js: Completed!');
+});
