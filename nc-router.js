@@ -1,3 +1,30 @@
+/**
+ *  nc-router.js
+ * 
+ *  This creates a node-based router manager that will
+ *  spin up individual NetCreate graph instances
+ *  running on their own node processes.
+ * 
+ *  To start this manually:
+ *    `node nc-router.js`
+ * 
+ *  Or use `npm run start`
+ * 
+ *  Then go to `localhost` to view the manager.
+ *  (NOTE: This runs on port 80, so need to add a port)
+ * 
+ *  The manager will list the running databases.
+ * 
+ *  To start a new graph:
+ *    `http://localhost/graph/tacitus`
+ * 
+ *  If the graph already exists, it will be loaded.
+ *  Otherwise it will create a new graph.
+ * 
+ *  Refresh the manager to view new databases.
+ *  
+ */
+
 const express = require("express");
 const app = express();
 const { fork } = require("child_process");
@@ -26,6 +53,11 @@ const port_net_suffix = 29;
 let children = [];
 let childCount = 0;
 const childMax = 3;
+
+
+console.log("...");
+console.log("...");
+console.log("...router: STARTED!");
 
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -81,7 +113,8 @@ app.get("/graph/:db", (req, res) => {
 async function requestChild(db, res) {
   const result = await promiseChild(db);
   console.log("...router: requestChild result:", result);
-  res.redirect(`http://localhost:${result.port}/graph/${result.db}`);
+  // res.redirect(`http://localhost:${result.port}/graph/${result.db}`);
+  res.redirect(`http://localhost:${result.port}`);
 }
 function promiseChild(db) {
   return new Promise((resolve, reject) => {
@@ -93,15 +126,27 @@ function promiseChild(db) {
     const port = getPort(childCount);
     const netport = getNetPort(childCount);
     
-    const args = [`--dataset=${db}`, `--port=${port}`, `--netport=${netport}`];
-    const forked = fork("./nc-start.js", args);
-    const forkdef = { db, port, netport };
-    forked.on('message', msg => {
-      console.log('...router: Message from child', msg);
-      resolve(forkdef);
-    })
-    forked.send(forkdef);
-    children.push(forkdef);
+    // direct start version
+    const forked = fork("./nc-start.js");
+    const forkParams = { db, port, netport };
+    
+    // nc version
+    // const args = [`--dataset=${db}`, `--port=${port}`, `--netport=${netport}`];
+    // const forked = fork("./nc-start-ncjs.js", args);
+    // const forkdef = { db, port, netport };
+
+    forked.on("message", (msg) => {
+      console.log("...router: Message from child:", msg);
+      console.log("...");
+      console.log("...");
+      console.log(`...router: ${db} STARTED!`);
+      console.log("...");
+      console.log("...");
+      resolve(forkParams);
+    });
+
+    forked.send(forkParams);
+    children.push(forkParams);
   });
 }
 
