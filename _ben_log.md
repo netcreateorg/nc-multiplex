@@ -3,7 +3,10 @@
 2020-07-19 Test a node-based router to actual netcreate app.
 This does not use Docker
 
+# QuickRef
 
+* RFC 3986 Path
+  https://tools.ietf.org/html/rfc3986#section-3.3
 
 
 
@@ -108,9 +111,145 @@ PRB: Goal is to map like this:
      
      Autoreload will be off, so we can ignore port 9485.
      
+PRB: Use http-proxy-middleware
+     Which itself relies on http-proxy
+     
+PRB: `netc-app.css` is failing
+     because it's not being rerouted to :3000.
+     Since the base URL is `localhost`, not `localhost/hawaii`
+     it isn't rerouted.
+     We need to route EVERYTHING.
+     
+     But you can't route everything if the db is in the path.
+     Because again, secondary calls do not have the route.
+     
+PRB: Can we force a subdomain?
+     => YES!
+     
+     This works better.  The submdain is always there.
+     This just means you always need to start from the manager?
+     
+     Or is there a way to catch the request before it gets
+     evaluated against the app.use calls?
+     
+##### => THREE FINDINGS
+    1. http-proxy Using path, e.g. `localhost/hawaii/#/edit/mop/` 
+       doesn't work well because it's hard to just reroute 
+       the main request and not the secondary requests
+       to other sources (e.g. js, css, etc.)
+       
+    2. http-proxy Using subdomains, e.g. `hawaii.localhost/#edit/map`
+       is much cleaner and portable.
+       It even works in dev environments because we can 
+       subdomain localhost?
+       
+       But what happens with a real domain behind a DNS
+       wall?  Will we be able to dynamically handle 
+       subdomains?  Will we have to route EVERYTHING?
+       
+       And what about IP addresses?
+       => Nope.  `hawaii.192.168.4.30` does not work.
+          This is a MAJOR problem if we're running
+          this in a classroom.
+          
+    3. express routes redirect, e.g. `localhost/hawaii/#/edit/mop`
+       kind of works.  The problem is the redirect results in
+       urls with ports, e.g. `localhost:3100/#/edit/mop`
+       
+       The secondary request problem isn't there because
+       the actual app calls go directly to the port, e.g. 
+       `localhost:3100/*`.  Only the initial db call goes to
+       `localhost/hawaii`.
 
 
-Look at http-proxy
+PRB: Can we use a static unrouted site to handle 
+     all the static requests?  Do those need to be 
+     routed to specific ports?  This would allow us to
+     just reroute the main call and the websocket call?
+     
+     => Doesn't work because netcreat-config.js
+        doesn't get rerouted!  It's missing in the base.
+
+
+
+#### PROXY -- 2020-07-21
+PRB: Try Query e.g. `localhost/?hawaii/#/edit/mop`
+     => This almost works.
+        The query paramter can be pulled out.
+        But netcreate-config.js call does not keep the query.
+        So we still have to route `localhost` to `localhost:3000`
+        to catch all non-querified requests.
+        THis means netcreate-config is rerouted to the base :3000
+        and loads that db.
+        
+PRB: Do we really need `netcreate-config.js`?
+     Can we bypass that?
+     * Can't dynamically require based on query?
+
+TRY: Inject into header?
+          -- port
+          -- netport
+          -- db
+       => Problem is that js can't read the headers directly.
+       
+TRY: Use ?query to reroute
+     The only call that keeps/uses the ?hawaii query is the 
+     main call?  Though other calls do have ?hawaii as the 
+     `initiator` e.g. `netcrete-config.js` has 
+     Referer: http://localhost/?hawaii/
+     
+TRY: Use referrer when handling `netcreate-config.js`?
+     Then route to proper port?
+     => Referrer might be unavailable / is sometimes not defined.
+     => Referrer seems to be not easy to access in the request object
+     
+TRY: Avoid `netcreate-config.js` altogether?
+     * Initial call uses ?hawaii to set up pararameters
+     * Subsequent NC_CONFIG calls are routed elsewhere?
+     
+     How do you load db values if they're not in NC_CONFIG?
+     Can we load `netcreate-config.js` using ?query?
+     
+     Who calls `netcreate-config.js`?
+     * SERVER-SIDE
+        * brunch-config.js    <-- read by brunch-server.js?
+          -- port override
+          -- dataset override for packaging
+        * brunch-server.js    <-- MAIN START SCRIPT
+          -- ip override
+          -- netport overide
+          This is just an express server!
+          It does not set the dataset.
+        * server-database.js
+          -- dataset override  <== MOST CRITICAL!!!
+     * CLIENT-SIDE
+        * index.html => bad call used by googlea
+        * index.ejs => probably bad call used by googlea
+        * nc-logic.js
+          -- googlea
+          -- dataset used to set db and template files
+        * InfoPanel.jsx
+          -- googlea
+     * nc.js -- creator of course
+     
+     If index.html and index.ejs are the only client-side calls
+     then generic re-route to 3000 should work?
+     => index.ejs uses netcreate-config.js for mutliple reasons.
+        Put in by sri on 5d6cfa0
+        Also true for index.html
+        Used for template selection.
+        
+     Why is this working then?
+     * It probably works because nc-logic.js loads netceate-config
+       only at initialization?
+       
+     What would it take to fully fix?
+     * nc-logic.js
+       -- Use query parameter to set dataset?
+        
+        
+     
+     
 
 
 ---
@@ -118,9 +257,17 @@ Look at http-proxy
 
 
 #### MEXT -- 2020-07-19
-* Return a promise when the app is actually created?  Is that even possible?
-  -- nc-start.js script stops at nc.js.  So the promise is not resolved.
+TRY: How do you define new dbs?
+     A special start command?
+     
+     Or maybe we only server existing dbs?
+
+
+* Secure connections?
+* Do we need to do a fork.send?
   
+* Redo google analytics / make sure it still works
+
 * How to handle startup
   --  Any new graph is going to take a minute to start up, unless...
       --  Is it possible to run precompiled versions? So only the db load is slow?
