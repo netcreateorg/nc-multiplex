@@ -147,6 +147,15 @@ function spawnApp(db) {
   });
 }
 
+/**
+ * Add Route only if it doesn't already exist
+ * @param {object} route 
+ */
+function AddRoute(newroute) {
+  if (routes.find(route => route.db === newroute.db)) return;
+  routes.push(newRoute);
+}
+
 ///////////////////////////////////////////////////////////////////////////////
 // HTTP-PROXY-MIDDLEWARE PORT ROUTER
 //
@@ -170,9 +179,9 @@ app.use(
   '/graph/:graph/',
   createProxyMiddleware(
     (pathname, req) => {
+      // only match if there is a trailing '/'?
       return req.params.graph;
     },
-    // '/graph/:graph',
     {
       router: async function (req) {
         const db = req.params.graph;
@@ -195,7 +204,7 @@ app.use(
             port: resultUrl.port,
             netport: resultUrl.netport
           }
-          routes.push(newRoute);
+          AddRoute(newRoute);
           return resultUrl;
         }
       },
