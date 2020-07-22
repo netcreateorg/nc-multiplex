@@ -349,12 +349,65 @@ TRY app.get('/')
        e.g. `/` will go to manager, but `/netlib.js` is routed to 3000    
 
     
+#### Catch non-trailing / -- 2020-07-22
+PRB Catch non-trailing /, e.g. `localhost/graph/tacitus` does not run
+    --  We should at least generate an error?
+        Look for extension?  If no extension, then generate error?
+        Otherwise, how do we know 
+        
+TRY `/graph/tacitus` => BAD
+        req.params { graph: 'tacitus' }
+        ...pathname /graph/tacitus
+        ...req.path /
+        ...req.baseUrl /graph/tacitus
+        ...req.originalUrl /graph/tacitus
+        
+        req.params { graph: 'netcreate-config.js' }
+        ...pathname /graph/netcreate-config.js
+        ...req.path /
+        ...req.baseUrl /graph/netcreate-config.js
+        ...req.originalUrl /graph/netcreate-config.js
+
+    `/graph/hawaii/` => GOOD
+        req.params { graph: 'hawaii' }
+        ...pathname /graph/hawaii/
+        ...req.path /
+        ...req.baseUrl /graph/hawaii
+        ...req.originalUrl /graph/hawaii/
+
+        req.params { graph: 'hawaii' }
+        ...pathname /graph/hawaii/netcreate-config.js
+        ...req.path /netcreate-config.js
+        ...req.baseUrl /graph/hawaii
+        ...req.originalUrl /graph/hawaii/netcreate-config.js
+        
+    `http://localhost/graph/marvel/#/edit/mop-bugle-lme`
+        req.params { graph: 'marvel' }
+        ...pathname /graph/marvel/
+        ...req.path /
+        ...req.baseUrl /graph/marvel
+        ...req.originalUrl /graph/marvel/
+        ...req.query {}
+
+        req.params { graph: 'marvel' }
+        ...pathname /graph/marvel/netcreate-config.js
+        ...req.path /netcreate-config.js
+        ...req.baseUrl /graph/marvel
+        ...req.originalUrl /graph/marvel/netcreate-config.js
+
+TRY Do we fail on first or second call?
+
+TRY Fail on req.original.Url.endswith('/')
+    => This will properly catch /graph/hawaii
+       but fail on /graph/hawaii/netcreate-config.js
+
+TRY Catch `/graph/:graph/:file`
+    => Seems that `:file` must be present?
+       it's not optional?  Or this won't match?
 
      
 # CURRENT ISSUES
 
-
-* Auto-start app at 3000
 
 * Show loading?
 
@@ -365,11 +418,13 @@ TRY app.get('/')
 
 
 #### MEXT -- 2020-07-19
-* Catch non-trailing /, e.g. `localhost/graph/tacitus` does not run
 
-* Stop a running process?
+* How to shut down a child?
+  --  If all children keep running, we might run out of resources?
+  --  Should children shut down after some timeout?      
 
 * Handle templates
+
 * Remove `?database=` parameter?  Or disable it?
 
 
@@ -382,30 +437,13 @@ TRY app.get('/')
     
 * Redo google analytics / make sure it still works
       
-* How to shut down a child?
-  --  If all children keep running, we might run out of resources?
-  --  Should children shut down after some timeout?      
 
 
 
-# help
+# Watch Directory
 
 If you want to watch a directory for changes (say, config files) you can use the chokidar npm package.
 
-![img](https://ca.slack-edge.com/T02GBCZS3-U02GBCZSF-gfbfa7a03768-48)
-
-**[ben](https://app.slack.com/team/U02GBCZSF)**[2 minutes ago](https://inquirium.slack.com/archives/C02GW9W11/p1595103594159000?thread_ts=1595091236.155700&cid=C02GW9W11)
-
-ah, cool!
-
-![img](https://ca.slack-edge.com/T02GBCZS3-U02H80ASU-9ee5122e31b6-48)
-
-**[daveseah](https://app.slack.com/team/U02H80ASU)**[1 minute ago](https://inquirium.slack.com/archives/C02GW9W11/p1595103639159200?thread_ts=1595091236.155700&cid=C02GW9W11)
-
 It's really easy to set up...you tell it a file or directory to watch, and it fires an event with the changes to your code.
-
-![img](https://ca.slack-edge.com/T02GBCZS3-U02H80ASU-9ee5122e31b6-48)
-
-**[daveseah](https://app.slack.com/team/U02H80ASU)**[1 minute ago](https://inquirium.slack.com/archives/C02GW9W11/p1595103666159400?thread_ts=1595091236.155700&cid=C02GW9W11)
 
 Its the basis for most livereload packages

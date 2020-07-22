@@ -193,11 +193,20 @@ SpawnApp('base');
 
 // HANDLE `/graph/:graph/
 app.use(
-  '/graph/:graph/',
+  '/graph/:graph/:file?',
   createProxyMiddleware(
     (pathname, req) => {
       // only match if there is a trailing '/'?
-      return req.params.graph;
+      console.log("req.params", req.params);
+      console.log("...pathname", pathname);               // `/hawaii/`;
+      console.log("...req.path", req.path);               // '/'
+      console.log("...req.baseUrl", req.baseUrl);         // '/hawaii'
+      console.log("...req.originalUrl", req.originalUrl); // '/hawaii/'      \
+      console.log("...req.query", req.query);             // '{}'
+      
+      if (req.params.file) return true; // legit file
+      if (req.params.graph && req.originalUrl.endsWith("/")) return true; // legit graph
+      return false;
     },
     {
       router: async function (req) {
@@ -235,6 +244,17 @@ app.use(
     }
   )
 );
+
+// MISSING "/" -- RETURN ERROR
+app.get('/graph/:file', (req, res) => {
+  console.log(PRE + '!!!!!!!!!!!!!!!!!!!!!!!!! BAD URL!')
+  res.set("Content-Type", "text/html");
+  res.send(
+    `Bad URL.  
+    Missing trailing "/".
+    Perhaps you meant <a href="${req.originalUrl}/">${req.originalUrl}/</a>`
+  );
+})
 
 app.get('/', (req, res) => {
   console.log(PRE + "!!!!!!!!!!!!!!!!!!!!! / ROOT!");
