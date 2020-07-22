@@ -169,6 +169,11 @@ PRB: Can we use a static unrouted site to handle
      
      => Doesn't work because netcreat-config.js
         doesn't get rerouted!  It's missing in the base.
+        
+* Redirect ports via proxy
+  --  https://stackoverflow.com/questions/23376301/how-do-i-dynamically-assign-a-port-in-nginx
+      `localhost/test/4000` => `localhost:4000/test`
+  => use http-proxy
 
 
 
@@ -264,24 +269,70 @@ TRY: Much cleaner to force db init
         `localhost/admin`
         `localhost/new`
      
+PRB: Newly created routes come AFTER the /?
+      so they are never triggered.
+      -- Do we need to delete all routes and recreate them 
+        with each new db loaded?
+      -- Can we re-order APIs?
+      
+TRY: Can we use a single formula (perhaps with parameters) 
+     to reroute everything?
+     => YES!  Works
 
-# CURRENT ISSUES
-* Newly created routes come AFTER the /?
-  so they are never triggered.
-  -- Do we need to delete all routes and recreate them 
-     with each new db loaded?
-  -- Can we re-order APIs?
-* Can we use a single formula (perhaps with parameters) to reroute everything?
 
+PRB: With `/graph/:graph` approach, why are websockets failing?
+     `auto-reload.js` seems to be trying to load ws://localhost:9488
+     Where does that even come from?
+     
+TRY: Turn off `ws: true` in all reroutes?
+     => NOPE
+     
+TRY: The request for netcreat-config.js is returning index.html
+     So the URL rewrite is too aggressive?
+     Turn off rewrite
+     => That doesn't work b/c `/graph/hawaii` is not found
+     Just remove `/graph/hawaii/`
+     
+     
+PRB: Why the heck is netcreate-config.js request being made
+     with `/graph` in the path?
+     #### working on path,req /graph/netcreate-config.js
+     #### req.params { graph: 'netcreate-config.js' }
 
+TRY: Use `src="/netcreate-config.js"` to remove `/graph`?
+     => Now it's returning empty?!?!
+     
+TRY: Don't we prefer `/graph/hawaii/netcreate-config.js`?
+     That way we can redirect to the right port!
+     => Yes.
+     
+     CAVEATS
+     * URL has to have trailing `/`
+       e.g. `http://localhost/graph/hawaii` will fail
+       because without trailing `/`, the netcreate-config.js request looks like
+       `http://localhost/graph/netcreate-config.js` so `netcreate-config.js`
+       is treated as the `:graph` parameter.
+       But `http://localhost/graph/hawaii/#/edit/mop-bugle-lme` will work
+     
+TRY: Do we need `/graph/hawaii/`?  Can it just be `/hawaii/`?
+     => NO!
+     * We need a code, otherwise, we can't distinguish between
+       management calls and db calls.
+     * We can use a shorter URL, e.g. `/g/`
 
 TRY: Use Regular expressions to clean route url?
      https://expressjs.com/en/guide/routing.html
+     => No need.  Using parameters instead.
 
-TRY: Use Route parameters?     
-        app.get('/users/:userId/books/:bookId', function (req, res) {
-          res.send(req.params)
-        })
+
+     
+# CURRENT ISSUES
+* Clean up code and commit.
+
+* Only add if nto already in routes
+
+* Auto-start app at 3000
+
 
 
 ---
@@ -289,38 +340,23 @@ TRY: Use Route parameters?
 
 
 #### MEXT -- 2020-07-19
-TRY: How do you define new dbs?
-     A special start command?
-     
-     Or maybe we only server existing dbs?
+* Catch non-trailing /, e.g. `localhost/graph/tacitus` does not run
+* Handle templates
+* Remove `?database=` parameter?  Or disable it?
 
+* List available dbs and allow startup directly from manage?
+
+* Do we need to do a fork.send?
 
 * Secure connections?
-* Do we need to do a fork.send?
-  
+  --  Do we need to prevent new dbs from being created?
+    
 * Redo google analytics / make sure it still works
-
-* How to handle startup
-  --  Any new graph is going to take a minute to start up, unless...
-      --  Is it possible to run precompiled versions? So only the db load is slow?
-  --  Once a graph has started, a redirect should work if user doesn't change URL
-  --  Copy and paste of URL is invalid b/c of port values will change
-      --  Is it possible to do port routing?
-      --  Maybe opening a db always requires initially hitting the router?
-      
-* How to handle the redirect after request?
-  --  Is it possible to redirect to ports without showing the port number?
-      REQUEST: nc.com/graph/tacitus
-      ROUTER:  nc.com:3100/graph/tacitus
-      It doesn't seem like it's possible?
       
 * How to shut down a child?
   --  If all children keep running, we might run out of resources?
   --  Should children shut down after some timeout?      
 
-* Redirect ports via proxy
-  --  https://stackoverflow.com/questions/23376301/how-do-i-dynamically-assign-a-port-in-nginx
-      `localhost/test/4000` => `localhost:4000/test`
 
 
 # help
