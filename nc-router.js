@@ -46,6 +46,9 @@
  
 */
 
+///////////////////////////////////////////////////////////////////////////////
+// CONSTANTS
+
 const { createProxyMiddleware } = require("http-proxy-middleware");
 const { fork } = require("child_process");
 const express = require("express");
@@ -59,10 +62,13 @@ let routes = []; // array of forkParams = { db, port, netport };
 let routeCount = 1; // Start at 3100
 const routeMax = 3;
 
-console.log("...");
-console.log("...");
-console.log("...router: STARTED!");
-console.log("...");
+const PRE = '...nc-router: ';
+
+console.log(`\n\n\n...`);
+console.log(PRE);
+console.log(PRE + "STARTED!");
+console.log(PRE);
+
 
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -117,28 +123,27 @@ function spawnApp(db) {
     const port = getPort(routeCount);
     const netport = getNetPort(routeCount);
 
-    // direct start version
+    // 1. Define script
     const forked = fork("./nc-start.js");
-    const forkParams = { db, port, netport };
 
-    // result url
+    // 2. Define success handler
     const url = {
       protocol: "http:",
       host: "localhost",
       port: port,
       netport: netport,
     };
-
     forked.on("message", (msg) => {
-      console.log("...router: Message from child:", msg);
-      console.log(`...\n...`);
-      console.log(`...router: ${db} STARTED!`);
-      console.log(`...\n...`);
+      console.log(PRE + "Received message from spawned fork:", msg);
+      console.log(PRE);
+      console.log(PRE + `${db} STARTED!`);
+      console.log(PRE);
       resolve(url);
     });
 
+    // 3. Trigger start
+    const forkParams = { db, port, netport };
     forked.send(forkParams);
-    routes.push(forkParams);
   });
 }
 
@@ -156,33 +161,15 @@ function spawnApp(db) {
         // console.log("...req.hostname", req.hostname);       // 'sub.localhost'
         // console.log("...req.subdomains", req.subdomains);   // []
 
-/**
- *  Pathname Query Approach
- * 
- *    `localhost/?hawaii/#/edit/mop` => `localhost:3100/?hawaii/#/edit/mop`
- * 
- *  The pathname is terminated by '?' or '#'
- *  A Query can be terminated by '#' as well.
- *  So we take advantage of that to inject two bits of info
- * 
- *  This works so long as:
- *  1. We start a generic app at :3000
- *  2. We manually start hawaii and tacitus at 3100 and 3200
- *     (because we haven't implemented new db init)
- *  
- */
-
 
 // Shelljs
 // START BASE APP
 
-// route based on formula
+// HANDLE `/graph/:graph/
 app.use(
-  '/graph/:graph',
+  '/graph/:graph/',
   createProxyMiddleware(
     (pathname, req) => {
-      console.log("...graph/:graph/req.originalUrl", req.originalUrl); // '{}'
-      console.log("...graph/:graph/req.params", req.params); // '{}'
       return req.params.graph;
     },
     // '/graph/:graph',
@@ -193,7 +180,7 @@ app.use(
         // look up
         let route = routes.find(route => route.db === db);
         if (route) {
-          console.log('--> mapping to ', route.db, route.port);
+          console.log(PRE + '--> mapping to ', route.db, route.port);
           return {
             protocol: "http:",
             host: "localhost",
@@ -201,7 +188,7 @@ app.use(
           };
         } else {
           // not defined yet, create a new one.
-          console.log("--> not defined yet, starting", db);
+          console.log(PRE + "--> not defined yet, starting", db);
           const resultUrl = await spawnApp(db);
           newRoute = {
             db,
@@ -213,12 +200,12 @@ app.use(
         }
       },
       pathRewrite: function (path, req) {
-        console.log('#### working on path,req', path);
+        console.log(PRE + "working on path,req", path);
         // remove '/graph'
-        console.log('#### req.params', req.params);
+        console.log(PRE + 'req.params', req.params);
         // const rewrite = path.split("/").splice(0, 1).join("/");
         const rewrite = path.replace(`/graph/${req.params.graph}`, '');
-        console.log('#### => ', rewrite);
+        console.log(PRE + '=> ', rewrite);
         // console.log("#### => replace ", path.replace("/graph"));
         return rewrite; // remove `/?hawaii/'
       },
@@ -230,7 +217,7 @@ app.use(
 );
 
 app.get('/', (req, res) => {
-  console.log("!!!!!!!!!!!!!!!!!!!!! / ROOT!");
+  console.log(PRE + "!!!!!!!!!!!!!!!!!!!!! / ROOT!");
   res.set("Content-Type", "text/html");
   let response = `<h1>NetCreate Manager</h1>`
   response += `<p>${ new Date().toLocaleTimeString() }</p >`;
@@ -269,5 +256,5 @@ app.use(
 // START ROUTER
 //
 app.listen(port_router, () =>
-  console.log(`nc-router.js on port ${port_router}.`)
+  console.log(PRE + `running on port ${port_router}.`)
 );
