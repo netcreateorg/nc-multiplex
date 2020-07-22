@@ -191,7 +191,10 @@ SpawnApp('base');
 // ----------------------------------------------------------------------------
 // ROUTES
 
-// HANDLE `/graph/:graph/
+// HANDLE `/graph/:graph/:file?
+//
+// If there's a missing trailing "/", the URL is malformed 
+//
 app.use(
   '/graph/:graph/:file?',
   createProxyMiddleware(
@@ -245,7 +248,7 @@ app.use(
   )
 );
 
-// MISSING "/" -- RETURN ERROR
+// HANDLE MISSING TRAILING ".../" -- RETURN ERROR
 app.get('/graph/:file', (req, res) => {
   console.log(PRE + '!!!!!!!!!!!!!!!!!!!!!!!!! BAD URL!')
   res.set("Content-Type", "text/html");
@@ -256,6 +259,8 @@ app.get('/graph/:file', (req, res) => {
   );
 })
 
+
+// HANDLE "/" -- MANAGER PAGE
 app.get('/', (req, res) => {
   console.log(PRE + "!!!!!!!!!!!!!!!!!!!!! / ROOT!");
   res.set("Content-Type", "text/html");
@@ -273,8 +278,14 @@ app.get('/', (req, res) => {
 })
 
 
+// HANDLE STATIC FILES
+//
 // Route Everything else to :3000
-// This is necessary to catch static page requests that do not have parameters.
+// :3000 is a "BASE" app that is actually a full NetCreate app
+// but it does nothing but serve static files.
+//
+// This is necessary to catch static page requests that do not have 
+// parameters, such as imports, requires, .js, .css, etc.
 //
 // This HAS to come LAST!
 // 
@@ -290,7 +301,8 @@ app.use(
 );
 
 
-// request paramters
+// `request` parameters reference
+//
 // console.log(`\n\nREQUEST: ${req.originalUrl}`)
 // console.log("...pathname", pathname);               // `/hawaii/`
 // console.log("...req.path", req.path);               // '/'
@@ -305,7 +317,7 @@ app.use(
 
 
 ///////////////////////////////////////////////////////////////////////////////
-// START ROUTER
+// START PROXY
 //
 app.listen(port_router, () =>
   console.log(PRE + `running on port ${port_router}.`)
