@@ -59,14 +59,14 @@ const port_router = 80;
 const port_app = 3000;
 const port_net_suffix = 29;
 
-let routes = []; // array of forkParams = { db, port, netport };
-let routeCount = -1; // Start at 3000 for BASE APP
+let children = []; // array of forked process + meta info = { db, port, netport, process };
+let childCount = -1; // Start at 3000 for BASE APP
 
 const PRE = '...nc-router: ';
 
 
 // OPTIONS
-const routeMax = 3; // Set this to limit the number of running processes
+const childMax = 3; // Set this to limit the number of running processes
                     // in order to keep a rein on CPU and MEM loads
 
 
@@ -105,14 +105,15 @@ function getNetPort(index) {
  * @param {string} db 
  */
 async function SpawnApp(db) {
-  const resultUrl = await PromiseApp(db);
-  newRoute = {
+  const result = await PromiseApp(db);
+  newChildSpec = {
     db,
-    port: resultUrl.port,
-    netport: resultUrl.netport
-  }
-  AddRoute(newRoute);
-  return resultUrl;
+    port: result.routerUrlSpec.port,
+    netport: result.routerUrlSpec.netport,
+    process: result.process,
+  };
+  AddChildSpec(newChildSpec);
+  return result.routerUrlSpec;
 }
 /**
  * Promises a new node NetCreate application process
@@ -127,36 +128,44 @@ async function SpawnApp(db) {
  * via fork messaging, at which point this promise is resolved.
  * 
  * @param {string} db 
+ * @return resolve sends the forked process and meta info
+ * 
  */
 function PromiseApp(db) {
   return new Promise((resolve, reject) => {
-    routeCount++;
-    if (routeCount > routeMax) {
-      reject(`Too many graphs open already!  Graph ${routeCount} not created.`);
+    childCount++;
+    if (childCount > childMax) {
+      reject(`Too many graphs open already!  Graph ${childCount} not created.`);
     }
 
-    const port = getPort(routeCount);
-    const netport = getNetPort(routeCount);
+    const port = getPort(childCount);
+    const netport = getNetPort(childCount);
 
     // 1. Define script
     const forked = fork("./nc-start.js");
 
-    // 2. Define success handler
-    const url = {
+    // 2. Define url specification for the proxy `router` function
+    const routerUrlSpec = {
       protocol: "http:",
       host: "localhost",
       port: port,
       netport: netport,
     };
+    
+    // 3. Define fork success handler
     forked.on("message", (msg) => {
       console.log(PRE + "Received message from spawned fork:", msg);
       console.log(PRE);
       console.log(PRE + `${db} STARTED!`);
       console.log(PRE);
-      resolve(url);
+      const result = {
+        process: forked,
+        routerUrlSpec: routerUrlSpec
+      }
+      resolve(result);
     });
 
-    // 3. Trigger start
+    // 4. Trigger start
     const forkParams = { db, port, netport };
     forked.send(forkParams);
   });
@@ -166,9 +175,9 @@ function PromiseApp(db) {
  * Add Route only if it doesn't already exist
  * @param {object} route 
  */
-function AddRoute(newroute) {
-  if (routes.find(route => route.db === newroute.db)) return;
-  routes.push(newRoute);
+function AddChildSpec(newroute) {
+  if (children.find(route => route.db === newroute.db)) return;
+  children.push(newroute);
 }
 
 
@@ -221,7 +230,7 @@ app.use(
         const db = req.params.graph;
         
         // look up
-        let route = routes.find(route => route.db === db);
+        let route = children.find(route => route.db === db);
         if (route) {
           console.log(PRE + '--> mapping to ', route.db, route.port);
           return {
@@ -253,6 +262,7 @@ app.use(
   )
 );
 
+
 // HANDLE MISSING TRAILING ".../" -- RETURN ERROR
 app.get('/graph/:file', (req, res) => {
   console.log(PRE + '!!!!!!!!!!!!!!!!!!!!!!!!! BAD URL!')
@@ -262,7 +272,32 @@ app.get('/graph/:file', (req, res) => {
     Missing trailing "/".
     Perhaps you meant <a href="${req.originalUrl}/">${req.originalUrl}/</a>`
   );
-})
+});
+
+
+// HANDLE "/kill/:graph" -- KILL REQUEST
+app.get('/kill/:graph/', (req, res) => {
+  console.log(PRE + "!!!!!!!!!!!!!!!!!!!!! / KILL!");
+  const db = req.params.graph;
+  res.set("Content-Type", "text/html");
+  let response = `<h1>NetCreate Manager</h1>`;
+  const child = children.find(child => child.db === db);
+  if (child) {
+    try {
+      child.process.kill();
+      children = children.filter(child => child.db !== db);
+      response += `<p>Process ${db} killed.`;
+    } catch (e) {
+      response += `<p>ERROR while trying to kill ${db}</p>`;
+      response += `<p>${e}</p>`;
+    }
+  } else {
+    response += "ERROR: No database found to kill: " + db;
+  }
+  response += `<p><a href="/">Back to Manager</a></p>`;  
+  
+  res.send(response);
+});
 
 
 // HANDLE "/" -- MANAGER PAGE
@@ -270,17 +305,19 @@ app.get('/', (req, res) => {
   console.log(PRE + "!!!!!!!!!!!!!!!!!!!!! / ROOT!");
   res.set("Content-Type", "text/html");
   let response = `<h1>NetCreate Manager</h1>`
-  response += `<p>${ new Date().toLocaleTimeString() }</p >`;
+  response += `<p>${new Date().toLocaleTimeString()}</p >`;
   response +=
-    "<table><thead><tr><td>Database</td><td>Port</td><td>Websocket</td></tr></thead><tbody>";
-  routes.forEach((route, index) => {
+    "<table><thead><tr><td>Database</td><td>Port</td><td>Websocket</td><td></td></tr></thead><tbody>";
+  children.forEach((route, index) => {
+    let kill = `<a href="/kill/${route.db}/">kill</a>`;
+    if (index < 1) kill = ''; // Don't allow BASE to be killed.
     response += `<tr><td>
 <a href="/graph/${route.db}/" target="${route.db}">${route.db}</a>
-</td><td>${route.port}</td><td>${route.netport}</td></tr>`;
+</td><td>${route.port}</td><td>${route.netport}</td><td>${kill}<td></tr>`;
   });
   response += `</tbody></table>`;
   res.send(response);
-})
+});
 
 
 // HANDLE STATIC FILES
