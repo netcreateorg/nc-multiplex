@@ -100,7 +100,10 @@ function getPort(index) {
 function getNetPort(index) {
   return getPort(index) + port_net_suffix;
 }
-
+/**
+ * Use this to spawn a new node instance
+ * @param {string} db 
+ */
 async function SpawnApp(db) {
   const resultUrl = await PromiseApp(db);
   newRoute = {
@@ -113,6 +116,8 @@ async function SpawnApp(db) {
 }
 /**
  * Promises a new node NetCreate application process
+ * 
+ * In general, don't call this directly.  Use SpawnApp.
  * 
  * This starts `nc-start.js` via a fork.
  * nc-start.js will generate netcreate-config.js and start
@@ -127,7 +132,7 @@ function PromiseApp(db) {
   return new Promise((resolve, reject) => {
     routeCount++;
     if (routeCount > routeMax) {
-      reject(`Too many children!  Child ${routeCount} not created.`);
+      reject(`Too many graphs open already!  Graph ${routeCount} not created.`);
     }
 
     const port = getPort(routeCount);
