@@ -53,8 +53,8 @@ const port_net_suffix = 29;
 
 // DB
 let children = [];
-let childCount = 0;
-const childMax = 3;
+let childCount = 2; // ###### HACK
+const childMax = 5;
 
 
 console.log("...");
@@ -86,7 +86,7 @@ function getNetPort(index) {
 
 ///////////////////////////////////////////////////////////////////////////////
 // EXPRESS ROUTES
-
+//
 // // root
 // app.get("/manage", (req, res) => {
 //   res.set('Content-Type', 'text/html');
@@ -96,9 +96,8 @@ function getNetPort(index) {
 //   });
 //   res.send(response);
 // });
-
-
-// // // /graph/dbname
+//
+// // Route `/graph/dbname`
 // app.get("/graph/:db", (req, res) => {
 //   const db = req.params.db;
 //   const forkdef = children.find((forkdef) => forkdef.db === db);
@@ -112,66 +111,68 @@ function getNetPort(index) {
 //     requestChild(db, res);
 //   }
 // });
-async function requestChild(db, res) {
-  const result = await promiseChild(db);
-  console.log("...router: requestChild result:", result);
-  // res.redirect(`http://localhost:${result.port}/graph/${result.db}`);
-  res.redirect(`http://localhost:${result.port}`);
-}
-function promiseChild(db) {
-  return new Promise((resolve, reject) => {
-    childCount++;
-    if (childCount > childMax) {
-      reject(`Too many children!  Child ${childCount} not created.`);
-    }
+// async function requestChild(db, res) {
+//   const result = await promiseChild(db);
+//   console.log("...router: requestChild result:", result);
+//   // res.redirect(`http://localhost:${result.port}/graph/${result.db}`);
+//   res.redirect(`http://localhost:${result.port}`);
+// }
+// function promiseChild(db) {
+//   return new Promise((resolve, reject) => {
+//     childCount++;
+//     if (childCount > childMax) {
+//       reject(`Too many children!  Child ${childCount} not created.`);
+//     }
     
-    const port = getPort(childCount);
-    const netport = getNetPort(childCount);
+//     const port = getPort(childCount);
+//     const netport = getNetPort(childCount);
     
-    // direct start version
-    const forked = fork("./nc-start.js");
-    const forkParams = { db, port, netport };
+//     // direct start version
+//     const forked = fork("./nc-start.js");
+//     const forkParams = { db, port, netport };
     
-    // nc version
-    // const args = [`--dataset=${db}`, `--port=${port}`, `--netport=${netport}`];
-    // const forked = fork("./nc-start-ncjs.js", args);
-    // const forkdef = { db, port, netport };
+//     // nc version
+//     // const args = [`--dataset=${db}`, `--port=${port}`, `--netport=${netport}`];
+//     // const forked = fork("./nc-start-ncjs.js", args);
+//     // const forkdef = { db, port, netport };
 
-    forked.on("message", (msg) => {
-      console.log("...router: Message from child:", msg);
-      console.log("...");
-      console.log("...");
-      console.log(`...router: ${db} STARTED!`);
-      console.log("...");
-      console.log("...");
-      resolve(forkParams);
-    });
+//     forked.on("message", (msg) => {
+//       console.log("...router: Message from child:", msg);
+//       console.log("...");
+//       console.log("...");
+//       console.log(`...router: ${db} STARTED!`);
+//       console.log("...");
+//       console.log("...");
+//       resolve(forkParams);
+//     });
 
-    forked.send(forkParams);
-    children.push(forkParams);
-  });
-}
+//     forked.send(forkParams);
+//     children.push(forkParams);
+//   });
+// }
 
 ///////////////////////////////////////////////////////////////////////////////
 // HTTP-PROXY-MIDDLEWARE PORT ROUTER
 //
 // This doesn't work if app also assigns gets (e.g. if there's a app.get call)
 
+// Original Express Routing
 // const filter = (pathname, req) => {
 //   // For http://sub.localhost/hawaii/#/edit/mop-bugle-lme
 //   // Note that anything after the '#' is ignored
 //   // See request object documentation: https://www.tutorialspoint.com/nodejs/nodejs_request_object.htm
 //
-//   console.log("pathname", pathname);               // `/hawaii/`
-//   console.log("req.path", req.path);               // '/'
-//   console.log("req.baseUrl", req.baseUrl);         // '/hawaii'
-//   console.log("req.originalUrl", req.originalUrl); // '/hawaii/'
-//   console.log("req.params", req.params);           // '{}'
-//   console.log("req.query", req.query);             // '{}'
-//   console.log("req.route", req.route);             // undefined
-//   console.log("req.hostname", req.hostname);       // 'sub.localhost'
-//   console.log("req.subdomains", req.subdomains);   // []
-  
+        // console.log(`\n\nREQUEST: ${req.originalUrl}`)
+        // console.log("...pathname", pathname);               // `/hawaii/`
+        // console.log("...req.path", req.path);               // '/'
+        // console.log("...req.baseUrl", req.baseUrl);         // '/hawaii'
+        // console.log("...req.originalUrl", req.originalUrl); // '/hawaii/'
+        // console.log("...req.params", req.params);           // '{}'
+        // console.log("...req.query", req.query);             // '{}'
+        // console.log("...req.route", req.route);             // undefined
+        // console.log("...req.hostname", req.hostname);       // 'sub.localhost'
+        // console.log("...req.subdomains", req.subdomains);   // []
+//
 //   return true; // true to match
 // };
 // app.use(
@@ -279,40 +280,25 @@ function promiseChild(db) {
  *     (because we haven't implemented new db init)
  *  
  */
+
+
 let forks = [
   { db: "hawaii", port: "3100" },
   { db: "tacitus", port: "3200" },
 ];
+
+// Shelljs
+// START HAWAII
+// START TACTIUS
+
 forks.forEach(fork => {
   app.use(
-    // (request, result, next) => {
-    //   console.log(`\nAPP REQUEST`);
-    //   console.log(`REQUEST`, request);
-    //   console.log(`RESULT`, result);
-    // },
     createProxyMiddleware(
       (pathname, req) => {
-        console.log(`\n\nREQUEST: ${req.originalUrl}`)
-        console.log("...pathname", pathname);               // `/hawaii/`
-        console.log("...req.path", req.path);               // '/'
-        console.log("...req.baseUrl", req.baseUrl);         // '/hawaii'
-        console.log("...req.originalUrl", req.originalUrl); // '/hawaii/'
-        console.log("...req.params", req.params);           // '{}'
-        console.log("...req.query", req.query);             // '{}'
-        console.log("...req.route", req.route);             // undefined
-        console.log("...req.hostname", req.hostname);       // 'sub.localhost'
-        console.log("...req.subdomains", req.subdomains);   // []
         return req.originalUrl === "/?" + fork.db + "/";
       },
       {
-        // pathRewrite: (path, req) => {
-        //   console.log('replacing ',path,'with',fork.db)
-        //   return path.replace(fork.db, '')
-        // },
         target: `http://localhost:${fork.port}`,
-        // router: req => {
-        
-        // },
         ws: true,
         changeOrigin: true
       }
@@ -321,7 +307,47 @@ forks.forEach(fork => {
 });
 
 
-// route everything else to 3000
+// Catch unmapped queries, e.g. `localhost/?newdb'
+app.use(
+  createProxyMiddleware(
+    (pathname, req) => {
+      console.log("caught /?", req.originalUrl.startsWith("/?"), 'url:', req.originalUrl);
+      // Also reject if no db name defined
+      return req.originalUrl.startsWith("/?") && req.originalUrl.length > 2;
+    },
+    {
+      router: async function (req) {
+        // we know it starts with /? so remove that
+        // and grab only the first path
+        let db = req.originalUrl.substring(2).split('/')[0];
+        const resultUrl = await promiseChild(db);
+        createProxy(db, resultUrl.port);
+        return resultUrl;
+      },
+      target: `http://localhost:3000`,
+      ws: true,
+      changeOrigin: true,
+    }
+  )
+);
+
+app.get("/manage", (req, res) => {
+  console.log('### / MANAGE!')
+  let response = `<p>NC Router! ${new Date().toLocaleTimeString()}</p>`;
+  res.send(response);
+});
+
+app.get("/new", (req, res) => {
+  console.log("### / NEW!");
+  let response = `<p>NC Router! ${new Date().toLocaleTimeString()}</p>`;
+  res.send(response);
+});
+
+
+// This HAS to come LAST!
+// 
+// Route Everything else to :3000
+// This is necessary to catch static page requests.
 app.use(
   createProxyMiddleware(
     '/',
@@ -333,6 +359,79 @@ app.use(
   )
 );
 
+
+
+function createProxy(db, port) {
+  app.use(
+    createProxyMiddleware(
+      (pathname, req) => req.originalUrl === "/?" + db + "/",
+      {
+        target: `http://localhost:${port}`,
+        ws: true,
+        changeOrigin: true,
+      }
+    )
+  );
+}
+
+/**
+ * 
+ * @param {*} db 
+ * @param {*} res 
+ * @return {string} : url to redirect to
+ * 
+ * 
+ * This doens't quite work b/c too many isntances are started
+ * e.g. all secondary requests for js and css result ins tarting
+ * a new app
+ * 
+ */
+async function requestNewDB(db) {
+  const result = await promiseChild(db);
+  console.log("...router: requestChild result:", result);
+  
+  // Add the proxy
+  // createProxy();
+  
+  return {
+    protocol: 'http:',
+    host: 'reroute.localhost',
+    port: result.port
+  };
+}
+function promiseChild(db) {
+  return new Promise((resolve, reject) => {
+    childCount++;
+    if (childCount > childMax) {
+      reject(`Too many children!  Child ${childCount} not created.`);
+    }
+    
+    const port = getPort(childCount);
+    const netport = getNetPort(childCount);
+    
+    // direct start version
+    const forked = fork("./nc-start.js");
+    const forkParams = { db, port, netport };
+    
+    // result url
+    const url = {
+      protocol: "http:",
+      host: "localhost",
+      port: port,
+    };
+    
+    forked.on("message", (msg) => {
+      console.log("...router: Message from child:", msg);
+      console.log(`...\n...`);
+      console.log(`...router: ${db} STARTED!`);
+      console.log(`...\n...`);
+      resolve(url);
+    });
+
+    forked.send(forkParams);
+    children.push(forkParams);
+  });
+}
 
 
 ///////////////////////////////////////////////////////////////////////////////

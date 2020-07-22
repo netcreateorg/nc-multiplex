@@ -247,9 +247,41 @@ TRY: Avoid `netcreate-config.js` altogether?
      * nc-logic.js
        -- Use query parameter to set dataset?
         
-        
+TRY: Load new db via `localhost/?newdb`?
+     * We'd have to catch the new `/?` designation
+     * And start up a new db
+     * And ignore/prevent/block secondary js/css calls
+       until the new db is up and running?
+     => Seems messy, but it can work
      
+TRY: Much cleaner to force db init
+     e.g via `localhost/new/newdb`
      
+     Solution involves two servers then:
+     1. Proxy Server
+        -- Routes to existing dbs or Manager
+     2. Manager Server
+        `localhost/admin`
+        `localhost/new`
+     
+
+# CURRENT ISSUES
+* Newly created routes come AFTER the /?
+  so they are never triggered.
+  -- Do we need to delete all routes and recreate them 
+     with each new db loaded?
+  -- Can we re-order APIs?
+* Can we use a single formula (perhaps with parameters) to reroute everything?
+
+
+
+TRY: Use Regular expressions to clean route url?
+     https://expressjs.com/en/guide/routing.html
+
+TRY: Use Route parameters?     
+        app.get('/users/:userId/books/:bookId', function (req, res) {
+          res.send(req.params)
+        })
 
 
 ---
