@@ -325,13 +325,38 @@ TRY: Use Regular expressions to clean route url?
      => No need.  Using parameters instead.
 
 
+#### Param vs Query -- 2020-07-22
+Should we use params `localhost/graph/hawaii/` or
+query `localhost/?hawaii`?
+
+* params advantages
+  -- `netcreate-config.js` is automatially requested from `/graph/hawaii/`
+      with query, the url would be `localhost/netcreate-config.js?hawaii`?
+  
+* query advantages
+  -- `/graph/hawaii` doesn't need a trailing `/`
+
+
+#### Handling root / -- 2020-07-22
+PRB What should the root page be?
+    And how do we distinguish that from a secondary request?
+    
+    If we need to route / to 3000 in order to handle secondary (includes/requires)
+    then how do we handle a generic request to localhost?
+    
+TRY app.get('/')
+    => That works.  And it doesn't interfere with the general / redirect.
+       e.g. `/` will go to manager, but `/netlib.js` is routed to 3000    
+
+    
+
      
 # CURRENT ISSUES
-* Clean up code and commit.
 
-* Only add if nto already in routes
 
 * Auto-start app at 3000
+
+* Show loading?
 
 
 
@@ -341,8 +366,12 @@ TRY: Use Regular expressions to clean route url?
 
 #### MEXT -- 2020-07-19
 * Catch non-trailing /, e.g. `localhost/graph/tacitus` does not run
+
+* Stop a running process?
+
 * Handle templates
 * Remove `?database=` parameter?  Or disable it?
+
 
 * List available dbs and allow startup directly from manage?
 

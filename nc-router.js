@@ -2,27 +2,27 @@
 
   nc-router.js
  
-  This creates a node-based router manager that will
-  spin up individual NetCreate graph instances
-  running on their own node processes.
- 
-  To start this manually:
-    `node nc-router.js`
- 
-  Or use `npm run start`
- 
-  Then go to `localhost` to view the manager.
-  (NOTE: This runs on port 80, so need to add a port)
- 
-  The manager will list the running databases.
- 
-  To start a new graph:
-    `http://localhost/graph/tacitus/`
- 
-  If the graph already exists, it will be loaded.
-  Otherwise it will create a new graph.
- 
-  Refresh the manager to view new databases.
+      This creates a node-based proxy server that will
+      spin up individual NetCreate graph instances
+      running on their own node processes.
+    
+      To start this manually:
+        `node nc-router.js`
+    
+      Or use `npm run start`
+    
+      Then go to `localhost` to view the manager.
+      (NOTE: This runs on port 80, so need to add a port)
+    
+      The manager will list the running databases.
+    
+      To start a new graph:
+        `http://localhost/graph/tacitus/`
+    
+      If the graph already exists, it will be loaded.
+      Otherwise it will create a new graph.
+    
+      Refresh the manager to view running databases.
   
  
   # Route Scheme
@@ -31,10 +31,11 @@
       /graph/<dbname>/#/edit/uid   => localhost:3x00/#/edit/uid
       /*.[js,css,html]             => localhost:3000/net-lib.js
 
+
   # Port scheme
  
-      The router runs on port 80.
-      Defined with port_router
+      The proxy server runs on port 80.
+      Defined in `port_router`
     
       Base application port is 3000
       New children start at 100
@@ -59,15 +60,14 @@ const port_app = 3000;
 const port_net_suffix = 29;
 
 let routes = []; // array of forkParams = { db, port, netport };
-let routeCount = 1; // Start at 3100
-const routeMax = 3;
+let routeCount = -1; // Start at 3000 for BASE APP
 
 const PRE = '...nc-router: ';
 
-console.log(`\n\n\n...`);
-console.log(PRE);
-console.log(PRE + "STARTED!");
-console.log(PRE);
+
+// OPTIONS
+const routeMax = 3; // Set this to limit the number of running processes
+                    // in order to keep a rein on CPU and MEM loads
 
 
 
@@ -101,6 +101,16 @@ function getNetPort(index) {
   return getPort(index) + port_net_suffix;
 }
 
+async function SpawnApp(db) {
+  const resultUrl = await PromiseApp(db);
+  newRoute = {
+    db,
+    port: resultUrl.port,
+    netport: resultUrl.netport
+  }
+  AddRoute(newRoute);
+  return resultUrl;
+}
 /**
  * Promises a new node NetCreate application process
  * 
@@ -113,7 +123,7 @@ function getNetPort(index) {
  * 
  * @param {string} db 
  */
-function spawnApp(db) {
+function PromiseApp(db) {
   return new Promise((resolve, reject) => {
     routeCount++;
     if (routeCount > routeMax) {
@@ -156,23 +166,30 @@ function AddRoute(newroute) {
   routes.push(newRoute);
 }
 
+
+
 ///////////////////////////////////////////////////////////////////////////////
-// HTTP-PROXY-MIDDLEWARE PORT ROUTER
+// HTTP-PROXY-MIDDLEWARE ROUTING
 //
-        // console.log(`\n\nREQUEST: ${req.originalUrl}`)
-        // console.log("...pathname", pathname);               // `/hawaii/`
-        // console.log("...req.path", req.path);               // '/'
-        // console.log("...req.baseUrl", req.baseUrl);         // '/hawaii'
-        // console.log("...req.originalUrl", req.originalUrl); // '/hawaii/'
-        // console.log("...req.params", req.params);           // '{}'
-        // console.log("...req.query", req.query);             // '{}'
-        // console.log("...req.route", req.route);             // undefined
-        // console.log("...req.hostname", req.hostname);       // 'sub.localhost'
-        // console.log("...req.subdomains", req.subdomains);   // []
+
+// ----------------------------------------------------------------------------
+// INIT
+console.log(`\n\n\n...`);
+console.log(PRE);
+console.log(PRE + "STARTED!");
+console.log(PRE);
 
 
-// Shelljs
 // START BASE APP
+// This is needed to handle static file requests.
+// Most imports/requires do not specify the db route /graph/dbname/
+// so we need to provide a base app that responds to those static file
+// requests.  This starts a generic "base" dataset at port 3000.
+SpawnApp('base');
+
+
+// ----------------------------------------------------------------------------
+// ROUTES
 
 // HANDLE `/graph/:graph/
 app.use(
@@ -198,13 +215,7 @@ app.use(
         } else {
           // not defined yet, create a new one.
           console.log(PRE + "--> not defined yet, starting", db);
-          const resultUrl = await spawnApp(db);
-          newRoute = {
-            db,
-            port: resultUrl.port,
-            netport: resultUrl.netport
-          }
-          AddRoute(newRoute);
+          const resultUrl = await SpawnApp(db);
           return resultUrl;
         }
       },
@@ -258,6 +269,18 @@ app.use(
   )
 );
 
+
+// request paramters
+// console.log(`\n\nREQUEST: ${req.originalUrl}`)
+// console.log("...pathname", pathname);               // `/hawaii/`
+// console.log("...req.path", req.path);               // '/'
+// console.log("...req.baseUrl", req.baseUrl);         // '/hawaii'
+// console.log("...req.originalUrl", req.originalUrl); // '/hawaii/'
+// console.log("...req.params", req.params);           // '{}'
+// console.log("...req.query", req.query);             // '{}'
+// console.log("...req.route", req.route);             // undefined
+// console.log("...req.hostname", req.hostname);       // 'sub.localhost'
+// console.log("...req.subdomains", req.subdomains);   // []
 
 
 
