@@ -1,44 +1,50 @@
-/**
- *  nc-router.js
- * 
- *  This creates a node-based router manager that will
- *  spin up individual NetCreate graph instances
- *  running on their own node processes.
- * 
- *  To start this manually:
- *    `node nc-router.js`
- * 
- *  Or use `npm run start`
- * 
- *  Then go to `localhost` to view the manager.
- *  (NOTE: This runs on port 80, so need to add a port)
- * 
- *  The manager will list the running databases.
- * 
- *  To start a new graph:
- *    `http://localhost/graph/tacitus`
- * 
- *  If the graph already exists, it will be loaded.
- *  Otherwise it will create a new graph.
- * 
- *  Refresh the manager to view new databases.
- *  
- * 
- * 
- *  # Port scheme
- * 
- *  The router runs on port 80.
- *  Defined with port_router
- * 
- *  Base application port is 3000
- *  New children start at 100
- *  With netports automatically set to xx29 (for websockets).
- * 
- *  e.g. first child would be:
- *       app port: 3100
- *       net port: 3129
- * 
- */
+/*
+
+  nc-router.js
+ 
+  This creates a node-based router manager that will
+  spin up individual NetCreate graph instances
+  running on their own node processes.
+ 
+  To start this manually:
+    `node nc-router.js`
+ 
+  Or use `npm run start`
+ 
+  Then go to `localhost` to view the manager.
+  (NOTE: This runs on port 80, so need to add a port)
+ 
+  The manager will list the running databases.
+ 
+  To start a new graph:
+    `http://localhost/graph/tacitus/`
+ 
+  If the graph already exists, it will be loaded.
+  Otherwise it will create a new graph.
+ 
+  Refresh the manager to view new databases.
+  
+ 
+  # Route Scheme
+  
+      /                            => localhost:80 Root: NetCreate Manager page
+      /graph/<dbname>/#/edit/uid   => localhost:3x00/#/edit/uid
+      /*.[js,css,html]             => localhost:3000/net-lib.js
+
+  # Port scheme
+ 
+      The router runs on port 80.
+      Defined with port_router
+    
+      Base application port is 3000
+      New children start at 100
+      With netports automatically set to xx29 (for websockets).
+    
+      e.g. first child would be:
+          app port: 3100
+          net port: 3129
+ 
+*/
 
 const { createProxyMiddleware } = require("http-proxy-middleware");
 const { fork } = require("child_process");
@@ -50,8 +56,8 @@ const port_app = 3000;
 const port_net_suffix = 29;
 
 let routes = []; // array of forkParams = { db, port, netport };
-let routeCount = 0;
-const routeMax = 5;
+let routeCount = 1; // Start at 3100
+const routeMax = 3;
 
 console.log("...");
 console.log("...");
@@ -86,27 +92,52 @@ function getNetPort(index) {
   return getPort(index) + port_net_suffix;
 }
 
+/**
+ * Promises a new node NetCreate application process
+ * 
+ * This starts `nc-start.js` via a fork.
+ * nc-start.js will generate netcreate-config.js and start
+ * the brunch server.
+ * 
+ * When nc-start.js has completed, it sends a message back
+ * via fork messaging, at which point this promise is resolved.
+ * 
+ * @param {string} db 
+ */
+function spawnApp(db) {
+  return new Promise((resolve, reject) => {
+    routeCount++;
+    if (routeCount > routeMax) {
+      reject(`Too many children!  Child ${routeCount} not created.`);
+    }
 
+    const port = getPort(routeCount);
+    const netport = getNetPort(routeCount);
 
-///////////////////////////////////////////////////////////////////////////////
-// EXPRESS ROUTES
-//
-// // Route `/graph/dbname`
-// app.get("/graph/:db", (req, res) => {
-//   const db = req.params.db;
-//   const forkdef = children.find((forkdef) => forkdef.db === db);
-//   if (forkdef) {
-//     console.log(`...router: ${db} found! Redirecting!`);
-//     // res.redirect(`http://localhost:${forkdef.port}/graph/${forkdef.db}`);
-//     // Just redirect to the port?  No need to spec db anymore?
-//     res.redirect(`http://localhost:${forkdef.port}/`);
-//   } else {
-//     console.log(`...router: ${db} not found, spawning new child`);
-//     requestChild(db, res);
-//   }
-// });
+    // direct start version
+    const forked = fork("./nc-start.js");
+    const forkParams = { db, port, netport };
 
-// }
+    // result url
+    const url = {
+      protocol: "http:",
+      host: "localhost",
+      port: port,
+      netport: netport,
+    };
+
+    forked.on("message", (msg) => {
+      console.log("...router: Message from child:", msg);
+      console.log(`...\n...`);
+      console.log(`...router: ${db} STARTED!`);
+      console.log(`...\n...`);
+      resolve(url);
+    });
+
+    forked.send(forkParams);
+    routes.push(forkParams);
+  });
+}
 
 ///////////////////////////////////////////////////////////////////////////////
 // HTTP-PROXY-MIDDLEWARE PORT ROUTER
@@ -144,22 +175,17 @@ function getNetPort(index) {
 
 // route based on formula
 app.use(
+  '/graph/:graph',
   createProxyMiddleware(
     (pathname, req) => {
-      console.log(
-        "caught /?",
-        req.originalUrl.startsWith("/?"),
-        "url:",
-        req.originalUrl
-      );
-      // Also reject if no db name defined
-      return req.originalUrl.startsWith("/?") && req.originalUrl.length > 2;
+      console.log("...graph/:graph/req.originalUrl", req.originalUrl); // '{}'
+      console.log("...graph/:graph/req.params", req.params); // '{}'
+      return req.params.graph;
     },
+    // '/graph/:graph',
     {
       router: async function (req) {
-        // we know it starts with /? so remove that
-        // and grab only the first path
-        let db = req.originalUrl.substring(2).split("/")[0];
+        const db = req.params.graph;
         
         // look up
         let route = routes.find(route => route.db === db);
@@ -172,7 +198,7 @@ app.use(
           };
         } else {
           // not defined yet, create a new one.
-          console.log("--> not defined yet starting", db);
+          console.log("--> not defined yet, starting", db);
           const resultUrl = await spawnApp(db);
           newRoute = {
             db,
@@ -184,35 +210,42 @@ app.use(
         }
       },
       pathRewrite: function (path, req) {
-        return ''; // remove `/?hawaii/'
+        console.log('#### working on path,req', path);
+        // remove '/graph'
+        console.log('#### req.params', req.params);
+        // const rewrite = path.split("/").splice(0, 1).join("/");
+        const rewrite = path.replace(`/graph/${req.params.graph}`, '');
+        console.log('#### => ', rewrite);
+        // console.log("#### => replace ", path.replace("/graph"));
+        return rewrite; // remove `/?hawaii/'
       },
-      target: `http://localhost:80`, // default fallback
+      target: `http://localhost:3000`, // default fallback
       ws: true,
       changeOrigin: true,
     }
   )
 );
 
-
-app.get("/manage", (req, res) => {
-  console.log('### / MANAGE!')
-  let response = `<p>NC Router! ${new Date().toLocaleTimeString()}</p>`;
+app.get('/', (req, res) => {
+  console.log("!!!!!!!!!!!!!!!!!!!!! / ROOT!");
+  res.set("Content-Type", "text/html");
+  let response = `<h1>NetCreate Manager</h1>`
+  response += `<p>${ new Date().toLocaleTimeString() }</p >`;
+  response +=
+    "<table><thead><tr><td>Database</td><td>Port</td><td>Websocket</td></tr></thead><tbody>";
+  routes.forEach((route, index) => {
+    response += `<tr><td>${route.db}</td><td>${route.port}</td><td>${route.netport}</td></tr>`;
+  });
+  response += `</tbody></table>`;
   res.send(response);
-});
-// app.get("/manage", (req, res) => {
-//   res.set('Content-Type', 'text/html');
-//   let response = `<p>NC Router! ${new Date().toLocaleTimeString()}</p>`;
-//   children.forEach((child, index) => {
-//     response += `<div>${index}). ${child.db}:${child.port}:${child.netport}</div>`;
-//   });
-//   res.send(response);
-// });
+})
 
 
+// Route Everything else to :3000
+// This is necessary to catch static page requests that do not have parameters.
+//
 // This HAS to come LAST!
 // 
-// Route Everything else to :3000
-// This is necessary to catch static page requests.
 app.use(
   createProxyMiddleware(
     '/',
@@ -224,40 +257,7 @@ app.use(
   )
 );
 
-function spawnApp(db) {
-  return new Promise((resolve, reject) => {
-    routeCount++;
-    if (routeCount > routeMax) {
-      reject(`Too many children!  Child ${routeCount} not created.`);
-    }
-    
-    const port = getPort(routeCount);
-    const netport = getNetPort(routeCount);
-    
-    // direct start version
-    const forked = fork("./nc-start.js");
-    const forkParams = { db, port, netport };
-    
-    // result url
-    const url = {
-      protocol: "http:",
-      host: "localhost",
-      port: port,
-      netport: netport
-    };
-    
-    forked.on("message", (msg) => {
-      console.log("...router: Message from child:", msg);
-      console.log(`...\n...`);
-      console.log(`...router: ${db} STARTED!`);
-      console.log(`...\n...`);
-      resolve(url);
-    });
 
-    forked.send(forkParams);
-    routes.push(forkParams);
-  });
-}
 
 
 ///////////////////////////////////////////////////////////////////////////////
