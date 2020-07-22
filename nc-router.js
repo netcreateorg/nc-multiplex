@@ -62,6 +62,7 @@ const routeMax = 3;
 console.log("...");
 console.log("...");
 console.log("...router: STARTED!");
+console.log("...");
 
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -71,8 +72,9 @@ console.log("...router: STARTED!");
  * Used to determine express server port for netcreate app instances
  * 
  * Given a route index, returns a port based on port_app + index*100, e.g. 
- *   port_app = 3000
+ *   with port_app = 3000
  *   getPort(2) => 3200
+ * 
  * @param {integer} index of route
  * @return integer
  */
@@ -83,8 +85,9 @@ function getPort(index) {
  * Used to determine port for websockets
  * 
  * Given a route index, returns a port based on port_app + index*100, e.g. 
- *   port_app = 3000
+ *   with port_app = 3000
  *   getPort(2) => 3229
+ * 
  * @param {integer} index of route
  * @return integer, e.g. if index=2, then 3229
  */
@@ -234,7 +237,9 @@ app.get('/', (req, res) => {
   response +=
     "<table><thead><tr><td>Database</td><td>Port</td><td>Websocket</td></tr></thead><tbody>";
   routes.forEach((route, index) => {
-    response += `<tr><td>${route.db}</td><td>${route.port}</td><td>${route.netport}</td></tr>`;
+    response += `<tr><td>
+<a href="/graph/${route.db}/" target="${route.db}">${route.db}</a>
+</td><td>${route.port}</td><td>${route.netport}</td></tr>`;
   });
   response += `</tbody></table>`;
   res.send(response);
