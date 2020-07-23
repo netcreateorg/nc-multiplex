@@ -52,6 +52,7 @@
 
 const { createProxyMiddleware } = require("http-proxy-middleware");
 const { fork } = require("child_process");
+const fs = require("fs");
 const express = require("express");
 const app = express();
 
@@ -181,6 +182,27 @@ function AddChildSpec(newroute) {
 }
 
 
+function DBIsActive(db) {
+  return children.find(route => route.db === db);
+}
+function ListDatabases() {
+  let response = '<ul>';
+  let files = fs.readdirSync("netcreate-2018/build/runtime/"); 
+  files.forEach((file) => {
+    // console.log("file:", file);
+    if (file.endsWith(".loki")) {
+      // console.log("adding", file);
+      let db = file.replace(".loki", "");
+      // Don't list dbs that are already open
+      if (!DBIsActive(db)) response += `<li><a href="/graph/${db}/">${db}</a></li>`;
+    }
+  });
+  
+  response += `</ul>`;
+  return response;
+}
+
+
 
 ///////////////////////////////////////////////////////////////////////////////
 // HTTP-PROXY-MIDDLEWARE ROUTING
@@ -303,19 +325,30 @@ app.get('/kill/:graph/', (req, res) => {
 // HANDLE "/" -- MANAGER PAGE
 app.get('/', (req, res) => {
   console.log(PRE + "!!!!!!!!!!!!!!!!!!!!! / ROOT!");
+  
   res.set("Content-Type", "text/html");
-  let response = `<h1>NetCreate Manager</h1>`
+  let response = `<img src="/images/netcreate-logo.svg" alt="NetCreate Logo" width="300px">`;
+  response +=  `<h1>NetCreate Manager</h1>`;
   response += `<p>${new Date().toLocaleTimeString()}</p >`;
+
+  response += `<h3>Active Graphs</h3>`;
+  response += `<p>Number of Active Graphs: ${childCount} / ${childMax} (max)`;
+  response += `<p>"Stop" active graphs if you're not using them anymore.  (Closing the window does not stop the graph.)</p>`;
   response +=
-    "<table><thead><tr><td>Database</td><td>Port</td><td>Websocket</td><td></td></tr></thead><tbody>";
+    "<table><thead><tr><td>Graph</td><td>Port</td><td>Websocket</td><td></td></tr></thead><tbody>";
   children.forEach((route, index) => {
-    let kill = `<a href="/kill/${route.db}/">kill</a>`;
+    let kill = `<a href="/kill/${route.db}/">stop</a>`;
     if (index < 1) kill = ''; // Don't allow BASE to be killed.
     response += `<tr><td>
 <a href="/graph/${route.db}/" target="${route.db}">${route.db}</a>
 </td><td>${route.port}</td><td>${route.netport}</td><td>${kill}<td></tr>`;
   });
   response += `</tbody></table>`;
+  
+  response += `<h3>Available Graphs</h3>`;
+  response += `<p>List of graph/database files on server.  Click link to open.</p>`;
+  response += ListDatabases();
+  
   res.send(response);
 });
 
