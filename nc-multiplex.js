@@ -77,8 +77,8 @@ const PRE = '...nc-multiplex: ';
 
 
 // OPTIONS
-const childMax = 3; // Set this to limit the number of running processes
-                    // in order to keep a rein on CPU and MEM loads
+const childMax = 10; // Set this to limit the number of running processes
+                     // in order to keep a rein on CPU and MEM loads
 
 
 // ----------------------------------------------------------------------------
