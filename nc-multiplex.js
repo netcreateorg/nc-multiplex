@@ -1,13 +1,13 @@
 /*
 
-  nc-router.js
+  nc-multiplex.js
  
       This creates a node-based proxy server that will
       spin up individual NetCreate graph instances
       running on their own node processes.
     
       To start this manually:
-        `node nc-router.js`
+        `node nc-multiplex.js`
     
       Or use `npm run start`
     
@@ -31,8 +31,8 @@
       to start the server with a specific IP address or google
       analytics code. e.g.: 
       
-        `node nc-router.js --ip=192.168.1.40`
-        `node nc-router.js --googlea=xxxxx`
+        `node nc-multiplex.js --ip=192.168.1.40`
+        `node nc-multiplex.js --googlea=xxxxx`
       
       
   # Route Scheme
@@ -73,7 +73,7 @@ const port_net_suffix = 29;
 let children = []; // array of forked process + meta info = { db, port, netport, process };
 let childCount = -1; // Start at 3000 for BASE APP
 
-const PRE = '...nc-router: ';
+const PRE = '...nc-multiplex: ';
 
 
 // OPTIONS
@@ -84,11 +84,11 @@ const childMax = 3; // Set this to limit the number of running processes
 // ----------------------------------------------------------------------------
 // READ OPTIONAL ARGUMENTS
 //
-// To set ip address or google analytics code, call nc-router with
+// To set ip address or google analytics code, call nc-multiplex with
 // arguments, e.g.
 //
-//   `node nc-router.js --ip=192.168.1.40`
-//   `node nc-router.js --googlea=xxxxx`
+//   `node nc-multiplex.js --ip=192.168.1.40`
+//   `node nc-multiplex.js --googlea=xxxxx`
 //
 
 const argv = require("minimist")(process.argv.slice(2));

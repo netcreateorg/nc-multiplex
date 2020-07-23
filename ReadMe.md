@@ -1,6 +1,6 @@
-# nc-router
+# nc-mutliplex
 
-nc-router implements multiple-database hosting for NetCreate.
+nc-mutliplex implements multiple-database hosting for NetCreate.
 
 It is a node-based reverse proxy / process manager that can spin up individual NetCreate graph instances running their own separate node processes on a single hosted server.
 
@@ -15,21 +15,21 @@ This repo contains only the reverse proxy server.  You will need to install the 
 * node 10+
 
 
-#### 1. Clone `nc-router`
+#### 1. Clone `nc-mutliplex`
 ```
 cd ~/your-dev-folder/
-git clone nc-router
+git clone nc-mutliplex
 ```
 
 #### 2. Install NetCreate
-Install NetCreate INSIDE the `nc-router` folder.  e.g. your directory structure should look something like this:
+Install NetCreate INSIDE the `nc-mutliplex` folder.  e.g. your directory structure should look something like this:
 ```
-~/your-dev-folder/nc-router/
-~/your-dev-folder/nc-router/netcreate-2018/
+~/your-dev-folder/nc-mutliplex/
+~/your-dev-folder/nc-mutliplex/netcreate-2018/
 ```
 
 ```
-cd ~/your-dev-folder/nc-router
+cd ~/your-dev-folder/nc-mutliplex
 git clone https://github.com/netcreateorg/netcreate-2018.git
 cd netcreate-2018
 npm ci
@@ -45,8 +45,8 @@ We need pre-compile the NetCreate code.  (This step is not necessary if you ran 
 
 #### 4. Start Reverse Proxy Server
 ```
-cd ~/your-dev-folder/nc-router
-node nc-router.js
+cd ~/your-dev-folder/nc-mutliplex
+node nc-mutliplex.js
 ```
 
 ***IP Address or Google Analytics Code**  
@@ -54,8 +54,8 @@ Use the optional `--ip` or `--googlea` parameters if you need
 to start the server with a specific IP address or google
 analytics code. e.g.: 
 
-  `node nc-router.js --ip=192.168.1.40`
-  `node nc-router.js --googlea=xxxxx`
+  `node nc-mutliplex.js --ip=192.168.1.40`
+  `node nc-mutliplex.js --googlea=xxxxx`
       
 See "Caveats" below for more information.
 
@@ -83,15 +83,15 @@ Refresh the manager to view the current list of running databases.
 
 #### 7. Load Exisitng Graph
 
-The manager lists all the graphs it finds on in the `~/your-dev-folder/nc-router/netcreate-2018/build/runtime/` folder.  You can click on the link to start the graph.
+The manager lists all the graphs it finds on in the `~/your-dev-folder/nc-mutliplex/netcreate-2018/build/runtime/` folder.  You can click on the link to start the graph.
 
 
 
 ## Managing Databases
 
-All databases are stored in the NetCreate runtime folder, e.g. `~/your-dev-folder/nc-router/netcreate-2018/build/runtime/`.  All node processes share the same database files.  So any database you spin up will be in the main runtime folder.
+All databases are stored in the NetCreate runtime folder, e.g. `~/your-dev-folder/nc-mutliplex/netcreate-2018/build/runtime/`.  All node processes share the same database files.  So any database you spin up will be in the main runtime folder.
 
-* Prepopulate the databases and templates by simply copying the `*.loki` and `*.template` files there prior to running `node nc-router.js`.
+* Prepopulate the databases and templates by simply copying the `*.loki` and `*.template` files there prior to running `node nc-mutliplex.js`.
 
 * You can copy and back up databases directly in the `runtime` folder.
 
@@ -99,7 +99,7 @@ All databases are stored in the NetCreate runtime folder, e.g. `~/your-dev-folde
 
 * When you request the database, the server will first try to load an existing file.  If none is found, it will create a new one.
 
-* Templates are handled the same way -- When you request a database, a template with the same name is requested.  If none exists, nc-router will create a new one based on the default template.
+* Templates are handled the same way -- When you request a database, a template with the same name is requested.  If none exists, nc-mutliplex will create a new one based on the default template.
 
 * Note you no longer need to use the `?` method to retrieve a specific database.  (It applies only to standalone mode anyway).  e.g. just use `localhost/graph/tacitus/` instead of `localhost/?dataset=2020-02-06_Tacitus#/`
 
@@ -108,9 +108,9 @@ All databases are stored in the NetCreate runtime folder, e.g. `~/your-dev-folde
 
 ## How it works
 
-nc-router is essentially a traffic cop and process manager.
+nc-mutliplex is essentially a traffic cop and process manager.
 
-Its principle role is traffic cop.  When a request comes in, e.g. `http://localhost/graph/tacitus/`, nc-router checks to see if there is already a running NetCreate instance.  If there isn't, it starts a new NetCreate instance, and then routes the traffic to `http://localhost:nnnn` where `nnnn` is the port number the newly created NetCreate instance is running on. The user never sees the port number.  (You can go directly to `http://localhost:nnnn` to work with the app if you want.)
+Its principle role is traffic cop.  When a request comes in, e.g. `http://localhost/graph/tacitus/`, nc-mutliplex checks to see if there is already a running NetCreate instance.  If there isn't, it starts a new NetCreate instance, and then routes the traffic to `http://localhost:nnnn` where `nnnn` is the port number the newly created NetCreate instance is running on. The user never sees the port number.  (You can go directly to `http://localhost:nnnn` to work with the app if you want.)
 
 When subsequent requests come in, any calls to `/graph/tacitus/` are also routed to the same port.  Any calls to other graphs, e.g. `/graph/hawaii/` are then spun up separately.
 
