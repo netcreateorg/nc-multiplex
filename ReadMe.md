@@ -1,8 +1,8 @@
 # nc-router
 
-nc-router implements multiple-datbase hosting for NetCreate.
+nc-router implements multiple-database hosting for NetCreate.
 
-It is a node-based reverse proxy / manager / express server that can spin up individual NetCreate graph instances running their own node processes on a single hosted server.
+It is a node-based reverse proxy / process manager that can spin up individual NetCreate graph instances running their own separate node processes on a single hosted server.
 
 
 ## Installation
@@ -10,10 +10,15 @@ It is a node-based reverse proxy / manager / express server that can spin up ind
 This repo contains only the reverse proxy server.  You will need to install the NetCreate repo separately.
 
 
+#### Prequisites
+* git
+* node 10+
+
+
 #### 1. Clone `nc-router`
 ```
+cd ~/your-dev-folder/
 git clone nc-router
-cd nc-router
 ```
 
 #### 2. Install NetCreate
@@ -24,6 +29,7 @@ Install NetCreate INSIDE the `nc-router` folder.  e.g. your directory structure 
 ```
 
 ```
+cd ~/your-dev-folder/nc-router
 git clone https://github.com/netcreateorg/netcreate-2018.git
 cd netcreate-2018
 npm ci
@@ -32,9 +38,9 @@ npm run dev         # Make sure NetCreate runs
 
 #### 3. Compile NetCreate for Classroom
 ```
-npm run classroom   # Not necessary if you ran `npm run dev` above
+npm run classroom
 ```
-We need pre-compile the NetCreate code.
+We need pre-compile the NetCreate code.  (This step is not necessary if you ran `npm run dev` above.)
 
 
 #### 4. Start Reverse Proxy Server
@@ -42,6 +48,17 @@ We need pre-compile the NetCreate code.
 cd ~/your-dev-folder/nc-router
 node nc-router.js
 ```
+
+***IP Address or Google Analytics Code**  
+Use the optional `--ip` or `--googlea` parameters if you need 
+to start the server with a specific IP address or google
+analytics code. e.g.: 
+
+  `node nc-router.js --ip=192.168.1.40`
+  `node nc-router.js --googlea=xxxxx`
+      
+See "Caveats" below for more information.
+
 
 #### 5. View the manager
 ```
@@ -61,15 +78,48 @@ The reverse proxy server will invisibly route your requests to a node instance r
 
 Refresh the manager to view the current list of running databases.
 
-NOTE: The trailing "/" is necessary in the URL.  The system will warn you if you try to start a database without it, e.g. `http://localhost/graph/tacitus`.  This is necessary because we would otherwise be unable to distinguish between new graph requests and static file requests.
+**IMPORTANT**: The trailing "/" is necessary in the URL.  The system will warn you if you try to start a database without it, e.g. `http://localhost/graph/tacitus`.  This is necessary because we would otherwise be unable to distinguish between new graph requests and static file requests.
+
+
+#### 7. Load Exisitng Graph
+
+The manager lists all the graphs it finds on in the `~/your-dev-folder/nc-router/netcreate-2018/build/runtime/` folder.  You can click on the link to start the graph.
+
+
+
+## Managing Databases
+
+All databases are stored in the NetCreate runtime folder, e.g. `~/your-dev-folder/nc-router/netcreate-2018/build/runtime/`.  All node processes share the same database files.  So any database you spin up will be in the main runtime folder.
+
+* Prepopulate the databases and templates by simply copying the `*.loki` and `*.template` files there prior to running `node nc-router.js`.
+
+* You can copy and back up databases directly in the `runtime` folder.
+
+* You can make modifications any time to the runtime folder and refresh the manager to view the new list.  Though keep in mind if someone is actively working on a graph, you may clobber their changes.
+
+* When you request the database, the server will first try to load an existing file.  If none is found, it will create a new one.
+
+* Templates are handled the same way -- When you request a database, a template with the same name is requested.  If none exists, nc-router will create a new one based on the default template.
+
+* Note you no longer need to use the `?` method to retrieve a specific database.  (It applies only to standalone mode anyway).  e.g. just use `localhost/graph/tacitus/` instead of `localhost/?dataset=2020-02-06_Tacitus#/`
+
 
 
 
 ## How it works
 
-Each graph is spun up with its own node process running on a separate port.  The port number is necessary to route calls to the correct instance.
+nc-router is essentially a traffic cop and process manager.
 
-There is a express server that handles all port 80 requests.  It then redirects requests to the individual graphs on specific ports.
+Its principle role is traffic cop.  When a request comes in, e.g. `http://localhost/graph/tacitus/`, nc-router checks to see if there is already a running NetCreate instance.  If there isn't, it starts a new NetCreate instance, and then routes the traffic to `http://localhost:nnnn` where `nnnn` is the port number the newly created NetCreate instance is running on. The user never sees the port number.  (You can go directly to `http://localhost:nnnn` to work with the app if you want.)
+
+When subsequent requests come in, any calls to `/graph/tacitus/` are also routed to the same port.  Any calls to other graphs, e.g. `/graph/hawaii/` are then spun up separately.
+
+This is done via an express server that handles all the requests.  This is running on port 80.  It then redirects requests to the individual graphs on specific ports.
+
+Because the system keeps spinning up new resources, we do have to keep an eye on them, as each instance will eat up a certain amount of memory and CPU cycles.  This is why there is a maximum active graph setting.  We'll have to do some testing to see where we should set the max.
+
+Each process will continue running until it is explicitly killed.  
+
 
 
 # Caveats
@@ -78,6 +128,19 @@ There is a express server that handles all port 80 requests.  It then redirects 
 
 There is absolutely no security on this system.  So use it with caution.  It's probably not a good idea to leave it permanently running on a public URL.
 
+
 * Wide open databases
 
 Anyone can view any database running on the server.
+
+
+* No limits on creating
+
+Anyone can create as many new databases as they want, using any name they choose.  If the name exists, the system will load the existing db.  There is currently no error checking here.  So you may end up with many hundreds of databases over time.
+
+
+* IP option is for private IP networks
+
+Generally, you won't need to use the `--ip` option.
+
+It is there for use with EC2 and docker implementations that default to a private ip network address.  In those cases, the public network ip is not visible to the `brunch-server` start script, and the system ends up using the private ip address for websockets, rendering it unreachable. Passing an IP address will force brunch to override the private ip address.  

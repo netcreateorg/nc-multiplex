@@ -3,7 +3,10 @@
  *  nc-start.js
  *
  *  This is a shell script will start NetCreate
- *  directly.
+ *  brunch server directly, bypassing nc.js
+ * 
+ *  It does however, create the same netcreate-config.js
+ *  file that the brunch-server uses for configuration.
  *  
  *  It assums that the app has been built.
  *

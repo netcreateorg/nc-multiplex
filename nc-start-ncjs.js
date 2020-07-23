@@ -8,6 +8,9 @@
  *  It is used in multi-db environments to start up
  *  multiple nc.js instances.
  * 
+ *  As of 7/20/2020 it has been deprecated in favor of
+ *  http-proxy-middleware in the new nc-start.js
+ * 
  */
 
 
@@ -38,7 +41,8 @@ if (googlea) {
 }
 
 process.on('message', data => {
-  // FIXME: we're foolishly ignoring the `data` passed here and relying on 
+  // FIXME: we're foolishly ignoring the `data` passed here via
+  // the fork parent and relying instead on
   // arguments passed to the shell.  duh.
   console.log('### nc-start.js: Starting nc.js script.')
   shell.cd("netcreate-2018/build");
