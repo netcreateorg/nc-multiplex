@@ -184,6 +184,8 @@ function PromiseApp(db) {
     };
     
     // 3. Define fork success handler
+    //    When the child node process is up and running, it will
+    //    send a message to this handler.
     forked.on("message", (msg) => {
       console.log(PRE + "Received message from spawned fork:", msg);
       console.log(PRE);
@@ -234,13 +236,17 @@ function ListDatabases() {
 
 
 
+
+
+
+
 ///////////////////////////////////////////////////////////////////////////////
 // HTTP-PROXY-MIDDLEWARE ROUTING
 //
 
 // ----------------------------------------------------------------------------
 // INIT
-console.log(`\n\n\n...`);
+console.log(`\n\n\n`);
 console.log(PRE);
 console.log(PRE + "STARTED!");
 console.log(PRE);
@@ -265,14 +271,7 @@ app.use(
   '/graph/:graph/:file?',
   createProxyMiddleware(
     (pathname, req) => {
-      // only match if there is a trailing '/'?
-      console.log("req.params", req.params);
-      console.log("...pathname", pathname);               // `/hawaii/`;
-      console.log("...req.path", req.path);               // '/'
-      console.log("...req.baseUrl", req.baseUrl);         // '/hawaii'
-      console.log("...req.originalUrl", req.originalUrl); // '/hawaii/'      \
-      console.log("...req.query", req.query);             // '{}'
-      
+      // only match if there is a trailing '/'
       if (req.params.file) return true; // legit file
       if (req.params.graph && req.originalUrl.endsWith("/")) return true; // legit graph
       return false;
@@ -298,13 +297,7 @@ app.use(
         }
       },
       pathRewrite: function (path, req) {
-        console.log(PRE + "working on path,req", path);
-        // remove '/graph'
-        console.log(PRE + 'req.params', req.params);
-        // const rewrite = path.split("/").splice(0, 1).join("/");
         const rewrite = path.replace(`/graph/${req.params.graph}`, '');
-        console.log(PRE + '=> ', rewrite);
-        // console.log("#### => replace ", path.replace("/graph"));
         return rewrite; // remove `/?hawaii/'
       },
       target: `http://localhost:3000`, // default fallback
@@ -317,7 +310,7 @@ app.use(
 
 // HANDLE MISSING TRAILING ".../" -- RETURN ERROR
 app.get('/graph/:file', (req, res) => {
-  console.log(PRE + '!!!!!!!!!!!!!!!!!!!!!!!!! BAD URL!')
+  console.log(PRE + '================== Handling BAD URL!')
   res.set("Content-Type", "text/html");
   res.send(
     `Bad URL.  
@@ -329,7 +322,7 @@ app.get('/graph/:file', (req, res) => {
 
 // HANDLE "/kill/:graph" -- KILL REQUEST
 app.get('/kill/:graph/', (req, res) => {
-  console.log(PRE + "!!!!!!!!!!!!!!!!!!!!! / KILL!");
+  console.log(PRE + "================== Handling / KILL!");
   const db = req.params.graph;
   res.set("Content-Type", "text/html");
   let response = `<h1>NetCreate Manager</h1>`;
@@ -354,16 +347,16 @@ app.get('/kill/:graph/', (req, res) => {
 
 // HANDLE "/" -- MANAGER PAGE
 app.get('/', (req, res) => {
-  console.log(PRE + "!!!!!!!!!!!!!!!!!!!!! / ROOT!");
+  console.log(PRE + "================== Handling / ROOT!");
   
   res.set("Content-Type", "text/html");
   let response = `<img src="/images/netcreate-logo.svg" alt="NetCreate Logo" width="300px">`;
-  response +=  `<h1>NetCreate Manager</h1>`;
-  response += `<p>${new Date().toLocaleTimeString()}</p >`;
+  response +=  `<h1>NetCreate Multiplex</h1>`;
+  response += `<p>Updated: ${new Date().toLocaleTimeString()}</p >`;
 
   response += `<h3>Active Graphs</h3>`;
   response += `<p>Number of Active Graphs: ${childCount} / ${childMax} (max)`;
-  response += `<p>"Stop" active graphs if you're not using them anymore.  (Closing the window does not stop the graph.)</p>`;
+  response += `<p>"Stop" active graphs if you're not using them anymore.<br/>(Closing the window does not stop the graph.)</p>`;
   response +=
     "<table><thead><tr><td>Graph</td><td>Port</td><td>Websocket</td><td></td></tr></thead><tbody>";
   children.forEach((route, index) => {
@@ -376,7 +369,7 @@ app.get('/', (req, res) => {
   response += `</tbody></table>`;
   
   response += `<h3>Available Graphs</h3>`;
-  response += `<p>List of graph/database files on server.  Click link to open.</p>`;
+  response += `<p>Graph/database files on server.  Click link to open.</p>`;
   response += ListDatabases();
   
   res.send(response);

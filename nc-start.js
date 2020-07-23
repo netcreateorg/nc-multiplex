@@ -19,7 +19,7 @@ const shell = require("shelljs");
 
 const pathToNetcreate = './netcreate-2018/build';
 
-const PRE = '@@@ nc-start.js:';
+const PRE = '.......nc-start: ';
 
 function writeConfig(data) {
   const { db, port, netport, ip, googlea } = data;
