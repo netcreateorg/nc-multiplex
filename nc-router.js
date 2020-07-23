@@ -25,6 +25,16 @@
       Refresh the manager to view running databases.
   
  
+  # Setting IP or Google Analytics code
+  
+      Use the optional `--ip` or `--googlea` parameters if you need 
+      to start the server with a specific IP address or google
+      analytics code. e.g.: 
+      
+        `node nc-router.js --ip=192.168.1.40`
+        `node nc-router.js --googlea=xxxxx`
+      
+      
   # Route Scheme
   
       /                            => localhost:80 Root: NetCreate Manager page
@@ -71,6 +81,20 @@ const childMax = 3; // Set this to limit the number of running processes
                     // in order to keep a rein on CPU and MEM loads
 
 
+// ----------------------------------------------------------------------------
+// READ OPTIONAL ARGUMENTS
+//
+// To set ip address or google analytics code, call nc-router with
+// arguments, e.g.
+//
+//   `node nc-router.js --ip=192.168.1.40`
+//   `node nc-router.js --googlea=xxxxx`
+//
+
+const argv = require("minimist")(process.argv.slice(2));
+const googlea = argv["googlea"];
+const ip = argv["ip"];
+
 
 ///////////////////////////////////////////////////////////////////////////////
 // UTILITIES
@@ -101,6 +125,12 @@ function getPort(index) {
 function getNetPort(index) {
   return getPort(index) + port_net_suffix;
 }
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+// PROCESS MANAGERS
+
 /**
  * Use this to spawn a new node instance
  * @param {string} db 
@@ -167,7 +197,7 @@ function PromiseApp(db) {
     });
 
     // 4. Trigger start
-    const forkParams = { db, port, netport };
+    const forkParams = { db, port, netport, ip, googlea };
     forked.send(forkParams);
   });
 }
