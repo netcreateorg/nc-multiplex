@@ -48,12 +48,24 @@
       Defined in `port_router`
     
       Base application port is 3000
-      New children start at 100
-      With netports automatically set to xx29 (for websockets).
-    
-      e.g. first child would be:
-          app port: 3100
-          net port: 3129
+      Base websocket port is 4000
+      
+      When the app is started, we initialize a pool of ports
+      indices basedon the PROCESS_MAX value.  
+      
+      When a process is spawned, we grab from the pool of port
+      indices, then generate new port numbers based on the 
+      index, where the app port and the websocket (net) port share
+      the same basic index, e.g. 
+      
+      { 
+        index: 2,
+        appport: 3002,
+        netport: 4002
+      }
+      
+      When the process is killed, the port index is returned
+      to the pool and re-used.
  
 */
 
@@ -77,8 +89,9 @@ const PRE = '...nc-multiplex: ';
 
 // OPTIONS
 const PROCESS_MAX = 3; // Set this to limit the number of running processes
-                      // in order to keep a rein on CPU and MEM loads
-                      // if index is set over 9, check port range limits 
+                       // in order to keep a rein on CPU and MEM loads
+                       // If you set this higher than 100 you should make
+                       // sure you open inbound ports higher than 3100 and 4100
 
 
 
@@ -152,8 +165,10 @@ function PortPoolIsEmpty() {
 
 /**
  * Use this to spawn a new node instance
+ * Calls PromiseApp.
+ * 
  * @param {string} db 
- * @return port to be used by router function
+ * @return {integer} port to be used by router function
  *         in app.use(`/graph/:graph/:file`...).
  */
 async function SpawnApp(db) {
@@ -165,6 +180,7 @@ async function SpawnApp(db) {
     console.error(PRE + "SpawnApp Failed with error", err);
   }
 }
+
 /**
  * Promises a new node NetCreate application process
  * 
@@ -178,7 +194,7 @@ async function SpawnApp(db) {
  * via fork messaging, at which point this promise is resolved.
  * 
  * @param {string} db 
- * @return resolve sends the forked process and meta info
+ * @resolve {object} sends the forked process and meta info
  * 
  */
 function PromiseApp(db) {
@@ -235,20 +251,26 @@ function AddChildProcess(newProcess) {
   childProcesses.push(newProcess);
 }
 
-
-function DBIsActive(db) {
+/**
+ * Returns true if the db is currently running as a process
+ * @param {string} db 
+ */
+function DBIsRunning(db) {
   return childProcesses.find(route => route.db === db);
 }
+
+/**
+ * Returns a list of databases in the runtime folder
+ * formatted as HTML <LI>s, with a link to open each graph.
+ */
 function ListDatabases() {
   let response = '<ul>';
   let files = fs.readdirSync("netcreate-2018/build/runtime/"); 
   files.forEach((file) => {
-    // console.log("file:", file);
     if (file.endsWith(".loki")) {
-      // console.log("adding", file);
       let db = file.replace(".loki", "");
       // Don't list dbs that are already open
-      if (!DBIsActive(db)) response += `<li><a href="/graph/${db}/">${db}</a></li>`;
+      if (!DBIsRunning(db)) response += `<li><a href="/graph/${db}/">${db}</a></li>`;
     }
   });
   

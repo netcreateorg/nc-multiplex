@@ -9,10 +9,14 @@ It is a node-based reverse proxy / process manager that can spin up individual N
 
 This repo contains only the reverse proxy server.  You will need to install the NetCreate repo separately.
 
+These instructions are primarily for installing on a local development machine.  See also "Installing in the Cloud" notes at the end.
+
 
 #### Requirements
 * git
 * node 10+
+
+We assume you already have git and node 10+ installed.
 
 
 #### 1. Clone `nc-multiplex`
@@ -158,9 +162,37 @@ Anyone can view any database running on the server.
 Anyone can create as many new databases as they want, using any name they choose.  If the name exists, the system will load the existing db.  There is currently no error checking here.  So you may end up with many hundreds of databases over time.
 
 
+# Installing in the Cloud
+
+There are a few other considerations if you're installing `nc-multiplex` in the cloud, e.g. Amazon EC2 or Digial Ocean.
+
+
+* Open Ports
+
+You'll need to open the following inbound ports to run `nc-multiplex`.
+
+**Inbound ports**
+```
+3000-3100 Application Instances
+4000-4100 WebSockets
+```
+
+If you set PROCESS_MAX (in `nc-multiplex.js`) higher than 100, you'll want to open more ports.  e.g. if PROCESS_MAX is 200, then you'll need to open the range `3000-3200` and `4000-4200`.
+
+All outbound ports should be open.
+
+In addition, if you plan on running NetCreate in `dev` mode (e.g. using the `.nc.js` script directly), you'll probably also want to open:
+```
+22   SSH
+2929 WebSockets for dev mode
+9485 For AutoReload
+```
+
+
 * IP option is for private IP networks
 
 Generally, you won't need to use the `--ip` option.
 
 `--ip` is for use with EC2 and docker implementations that default to a private ip network address.  In those cases, the public network ip is not visible to the `brunch-server` start script, and the system ends up using the private ip address for websockets, rendering it unreachable. Passing an IP address will force brunch to override the private ip address.
+
 
