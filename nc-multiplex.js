@@ -67,19 +67,18 @@ const express = require("express");
 const app = express();
 
 const port_router = 80;
-const port_app = 3000;
-const port_net_suffix = 29;
+const port_app = 3000; // base port for nc apps
+const port_ws = 4000; // base port for websockets
 
-let children = []; // array of forked process + meta info = { db, port, netport, process };
-let childIndex = -1; // Start at 3000 for BASE APP
+let childProcesses = []; // array of forked process + meta info = { db, port, netport, portindex, process };
 
 const PRE = '...nc-multiplex: ';
 
 
 // OPTIONS
-const childMax = 3; // Set this to limit the number of running processes
-                    // in order to keep a rein on CPU and MEM loads
-                    // if index is set over 9, check port range limits 
+const processMax = 3; // Set this to limit the number of running processes
+                      // in order to keep a rein on CPU and MEM loads
+                      // if index is set over 9, check port range limits 
 
 
 // ----------------------------------------------------------------------------
@@ -100,32 +99,74 @@ const ip = argv["ip"];
 ///////////////////////////////////////////////////////////////////////////////
 // UTILITIES
 
+
+
+// Initialize port pool
+//    port 0 is for the base app
+const port_pool = []; // array of available port indices, usu [1...100]
+for (let i = 0; i <= processMax; i++ ) {
+  port_pool.push(i);
+}
+
 /**
- * Used to determine express server port for netcreate app instances
- * 
- * Given a route index, returns a port based on port_app + index*100, e.g. 
- *   with port_app = 3000
- *   getPort(2) => 3200
+ * Gets the next available port from the pool.
  * 
  * @param {integer} index of route
- * @return integer
+ * @return {object} JSON object definition, e.g.
+ * {
+ *   index: integer    // e.g. 3
+ *   appport: integer  // e.g. 3003
+ *   netport: integer  // e.g. 4003
+ * }
+ * or `undefined` if no items are left in the pool
  */
-function getPort(index) {
-  return port_app + index * 100;
+function PickPort() {
+  if (port_pool.length < 1) return undefined;
+  const index = port_pool.shift();
+  const result = {
+    index,
+    appport: port_app + index,
+    netport: port_ws + index
+  };
+  return result;
 }
+
 /**
- * Used to determine port for websockets
  * 
- * Given a route index, returns a port based on port_app + index*100, e.g. 
- *   with port_app = 3000
- *   getPort(2) => 3229
- * 
- * @param {integer} index of route
- * @return integer, e.g. if index=2, then 3229
+ * @param {integer} index -- Port index to return to the pool
  */
-function getNetPort(index) {
-  return getPort(index) + port_net_suffix;
+function ReleasePort(index) {
+  if (port_pool.find((port) => port === index))
+    throw "ERROR: Port already in pool! This should not happen! " + index; 
+  port_pool.push(index);
 }
+
+// /**
+//  * Used to determine express server port for netcreate app instances
+//  * 
+//  * Given a route index, returns a port based on port_app + index*100, e.g. 
+//  *   with port_app = 3000
+//  *   getPort(2) => 3200
+//  * 
+//  * @param {integer} index of route
+//  * @return integer
+//  */
+// function getPort(index) {
+//   return port_app + index * 100;
+// }
+// /**
+//  * Used to determine port for websockets
+//  * 
+//  * Given a route index, returns a port based on port_app + index*100, e.g. 
+//  *   with port_app = 3000
+//  *   getPort(2) => 3229
+//  * 
+//  * @param {integer} index of route
+//  * @return integer, e.g. if index=2, then 3229
+//  */
+// function getNetPort(index) {
+//   return getPort(index) + port_net_suffix;
+// }
 
 
 
@@ -135,17 +176,13 @@ function getNetPort(index) {
 /**
  * Use this to spawn a new node instance
  * @param {string} db 
+ * @return port to be used by router function
+ *         in app.use(`/graph/:graph/:file`...).
  */
 async function SpawnApp(db) {
-  const result = await PromiseApp(db);
-  newChildSpec = {
-    db,
-    port: result.routerUrlSpec.port,
-    netport: result.routerUrlSpec.netport,
-    process: result.process,
-  };
-  AddChildSpec(newChildSpec);
-  return result.routerUrlSpec;
+  const newProcessDef = await PromiseApp(db);
+  AddChildProcess(newProcessDef);
+  return newProcessDef.port;
 }
 /**
  * Promises a new node NetCreate application process
@@ -165,43 +202,46 @@ async function SpawnApp(db) {
  */
 function PromiseApp(db) {
   return new Promise((resolve, reject) => {
-    childIndex++;
-    if (children.length > childMax) {
+    const ports = PickPort();
+    if (ports === undefined) {
       reject(`Too many graphs open already!  Graph ${childIndex} not created.`);
     }
 
-    const port = getPort(childIndex);
-    const netport = getNetPort(childIndex);
-
-    // 1. Define script
+    // 1. Define the fork
     const forked = fork("./nc-start.js");
-
-    // 2. Define url specification for the proxy `router` function
-    const routerUrlSpec = {
-      protocol: "http:",
-      host: "localhost",
-      port: port,
-      netport: netport,
-    };
     
-    // 3. Define fork success handler
+    // 2. Define fork success handler
     //    When the child node process is up and running, it will
-    //    send a message to this handler.
+    //    send a message to this handler, which in turn
+    //    sends the new spec back to SpawnApp
     forked.on("message", (msg) => {
       console.log(PRE + "Received message from spawned fork:", msg);
       console.log(PRE);
       console.log(PRE + `${db} STARTED!`);
       console.log(PRE);
-      const result = {
-        process: forked,
-        routerUrlSpec: routerUrlSpec
-      }
-      resolve(result);
+      const newProcessDef = {
+        db,
+        port: ports.appport,
+        netport: ports.netport,
+        portindex: ports.index,
+        process: forked
+      };
+      resolve(newProcessDef); // pass to SpawnApp
     });
 
-    // 4. Trigger start
-    const forkParams = { db, port, netport, ip, googlea };
-    forked.send(forkParams);
+    // 3. Send message to start fork
+    //    This sends the necessary startup prarameters to nc-start.js
+    //    When nc-start is completed, it will call the message
+    //    handler in #2 above
+    const ncStartParams = {
+      db,
+      port: ports.appport,
+      netport: ports.netport,
+      process: forked,
+      ip,
+      googlea
+    };
+    forked.send(ncStartParams);
   });
 }
 
@@ -209,14 +249,14 @@ function PromiseApp(db) {
  * Add Route only if it doesn't already exist
  * @param {object} route 
  */
-function AddChildSpec(newroute) {
-  if (children.find(route => route.db === newroute.db)) return;
-  children.push(newroute);
+function AddChildProcess(newProcess) {
+  if (childProcesses.find(route => route.db === newProcess.db)) return;
+  childProcesses.push(newProcess);
 }
 
 
 function DBIsActive(db) {
-  return children.find(route => route.db === db);
+  return childProcesses.find(route => route.db === db);
 }
 function ListDatabases() {
   let response = '<ul>';
@@ -280,22 +320,25 @@ app.use(
     {
       router: async function (req) {
         const db = req.params.graph;
+        let port;
         
         // look up
-        let route = children.find(route => route.db === db);
+        let route = childProcesses.find(route => route.db === db);
         if (route) {
           console.log(PRE + '--> mapping to ', route.db, route.port);
-          return {
-            protocol: "http:",
-            host: "localhost",
-            port: route.port,
-          };
+          port = route.port;
         } else {
           // not defined yet, create a new one.
           console.log(PRE + "--> not defined yet, starting", db);
-          const resultUrl = await SpawnApp(db);
-          return resultUrl;
+          // const routerUrlSpec = await SpawnApp(db);
+          // return routerUrlSpec; // {protocol, host, port}
+          port = await SpawnApp(db);
         }
+        return {
+          protocol: "http:",
+          host: "localhost",
+          port: port,
+        };
       },
       pathRewrite: function (path, req) {
         const rewrite = path.replace(`/graph/${req.params.graph}`, '');
@@ -327,11 +370,14 @@ app.get('/kill/:graph/', (req, res) => {
   const db = req.params.graph;
   res.set("Content-Type", "text/html");
   let response = `<h1>NetCreate Manager</h1>`;
-  const child = children.find(child => child.db === db);
+  const child = childProcesses.find(child => child.db === db);
   if (child) {
     try {
       child.process.kill();
-      children = children.filter(child => child.db !== db);
+      // Return the port index to the pool
+      ReleasePort(child.portindex);
+      // Remove child from childProcesses
+      childProcesses = childProcesses.filter(child => child.db !== db);
       response += `<p>Process ${db} killed.`;
     } catch (e) {
       response += `<p>ERROR while trying to kill ${db}</p>`;
@@ -356,11 +402,11 @@ app.get('/', (req, res) => {
   response += `<p>Updated: ${new Date().toLocaleTimeString()}</p >`;
 
   response += `<h3>Active Graphs</h3>`;
-  response += `<p>Number of Active Graphs: ${children.length-1} / ${childMax} (max)`;
+  response += `<p>Number of Active Graphs: ${childProcesses.length-1} / ${processMax} (max)`;
   response += `<p>"Stop" active graphs if you're not using them anymore.<br/>(Closing the window does not stop the graph.)</p>`;
   response +=
     "<table><thead><tr><td>Graph</td><td>Port</td><td>Websocket</td><td></td></tr></thead><tbody>";
-  children.forEach((route, index) => {
+  childProcesses.forEach((route, index) => {
     let kill = `<a href="/kill/${route.db}/">stop</a>`;
     if (index < 1) kill = ''; // Don't allow BASE to be killed.
     response += `<tr><td>
