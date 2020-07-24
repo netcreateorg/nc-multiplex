@@ -12,6 +12,9 @@
  *
  *  It is used in multi-db environments to start up
  *  multiple nc.js instances.
+ * 
+ *  Generally it is not called directly, but 
+ *  is called by `nc-multiplex.js`.
  *
  */
 

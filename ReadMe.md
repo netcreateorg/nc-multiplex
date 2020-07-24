@@ -19,6 +19,8 @@ This repo contains only the reverse proxy server.  You will need to install the 
 ```
 cd ~/your-dev-folder/
 git clone https://gitlab.com/netcreate/nc-multiplex.git
+cd ~/your-dev-folder/nc-multiplex
+npm ci
 ```
 
 #### 2. Install NetCreate
