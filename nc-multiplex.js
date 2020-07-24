@@ -71,14 +71,15 @@ const port_app = 3000;
 const port_net_suffix = 29;
 
 let children = []; // array of forked process + meta info = { db, port, netport, process };
-let childCount = -1; // Start at 3000 for BASE APP
+let childIndex = -1; // Start at 3000 for BASE APP
 
 const PRE = '...nc-multiplex: ';
 
 
 // OPTIONS
-const childMax = 10; // Set this to limit the number of running processes
-                     // in order to keep a rein on CPU and MEM loads
+const childMax = 3; // Set this to limit the number of running processes
+                    // in order to keep a rein on CPU and MEM loads
+                    // if index is set over 9, check port range limits 
 
 
 // ----------------------------------------------------------------------------
@@ -164,13 +165,13 @@ async function SpawnApp(db) {
  */
 function PromiseApp(db) {
   return new Promise((resolve, reject) => {
-    childCount++;
-    if (childCount > childMax) {
-      reject(`Too many graphs open already!  Graph ${childCount} not created.`);
+    childIndex++;
+    if (children.length > childMax) {
+      reject(`Too many graphs open already!  Graph ${childIndex} not created.`);
     }
 
-    const port = getPort(childCount);
-    const netport = getNetPort(childCount);
+    const port = getPort(childIndex);
+    const netport = getNetPort(childIndex);
 
     // 1. Define script
     const forked = fork("./nc-start.js");
@@ -355,7 +356,7 @@ app.get('/', (req, res) => {
   response += `<p>Updated: ${new Date().toLocaleTimeString()}</p >`;
 
   response += `<h3>Active Graphs</h3>`;
-  response += `<p>Number of Active Graphs: ${childCount} / ${childMax} (max)`;
+  response += `<p>Number of Active Graphs: ${children.length-1} / ${childMax} (max)`;
   response += `<p>"Stop" active graphs if you're not using them anymore.<br/>(Closing the window does not stop the graph.)</p>`;
   response +=
     "<table><thead><tr><td>Graph</td><td>Port</td><td>Websocket</td><td></td></tr></thead><tbody>";
