@@ -66,9 +66,9 @@ const fs = require("fs");
 const express = require("express");
 const app = express();
 
-const port_router = 80;
-const port_app = 3000; // base port for nc apps
-const port_ws = 4000; // base port for websockets
+const PORT_ROUTER = 80;
+const PORT_APP = 3000; // base port for nc apps
+const PORT_WS = 4000; // base port for websockets
 
 let childProcesses = []; // array of forked process + meta info = { db, port, netport, portindex, process };
 
@@ -76,9 +76,10 @@ const PRE = '...nc-multiplex: ';
 
 
 // OPTIONS
-const processMax = 3; // Set this to limit the number of running processes
+const PROCESS_MAX = 3; // Set this to limit the number of running processes
                       // in order to keep a rein on CPU and MEM loads
                       // if index is set over 9, check port range limits 
+
 
 
 // ----------------------------------------------------------------------------
@@ -104,7 +105,7 @@ const ip = argv["ip"];
 // Initialize port pool
 //    port 0 is for the base app
 const port_pool = []; // array of available port indices, usu [1...100]
-for (let i = 0; i <= processMax; i++ ) {
+for (let i = 0; i <= PROCESS_MAX; i++ ) {
   port_pool.push(i);
 }
 
@@ -125,8 +126,8 @@ function PickPort() {
   const index = port_pool.shift();
   const result = {
     index,
-    appport: port_app + index,
-    netport: port_ws + index
+    appport: PORT_APP + index,
+    netport: PORT_WS + index
   };
   return result;
 }
@@ -141,33 +142,9 @@ function ReleasePort(index) {
   port_pool.push(index);
 }
 
-// /**
-//  * Used to determine express server port for netcreate app instances
-//  * 
-//  * Given a route index, returns a port based on port_app + index*100, e.g. 
-//  *   with port_app = 3000
-//  *   getPort(2) => 3200
-//  * 
-//  * @param {integer} index of route
-//  * @return integer
-//  */
-// function getPort(index) {
-//   return port_app + index * 100;
-// }
-// /**
-//  * Used to determine port for websockets
-//  * 
-//  * Given a route index, returns a port based on port_app + index*100, e.g. 
-//  *   with port_app = 3000
-//  *   getPort(2) => 3229
-//  * 
-//  * @param {integer} index of route
-//  * @return integer, e.g. if index=2, then 3229
-//  */
-// function getNetPort(index) {
-//   return getPort(index) + port_net_suffix;
-// }
-
+function PortPoolIsEmpty() {
+  return port_pool.length < 1;
+}
 
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -180,9 +157,13 @@ function ReleasePort(index) {
  *         in app.use(`/graph/:graph/:file`...).
  */
 async function SpawnApp(db) {
-  const newProcessDef = await PromiseApp(db);
-  AddChildProcess(newProcessDef);
-  return newProcessDef.port;
+  try {
+    const newProcessDef = await PromiseApp(db);
+    AddChildProcess(newProcessDef);
+    return newProcessDef.port;
+  } catch (err) {
+    console.error(PRE + "SpawnApp Failed with error", err);
+  }
 }
 /**
  * Promises a new node NetCreate application process
@@ -318,20 +299,28 @@ app.use(
       return false;
     },
     {
+      // The router function tries to route to the correct port by:
+      // a) if process is already running, use existing port
+      // b) if the process isn't running, spawn a new process
+      //    and pass the port
+      // c) if no more ports are available, redirect back to the root.
       router: async function (req) {
         const db = req.params.graph;
         let port;
         
-        // look up
+        // Is it already running?
         let route = childProcesses.find(route => route.db === db);
         if (route) {
+          // a) Yes. Use existing route!
           console.log(PRE + '--> mapping to ', route.db, route.port);
           port = route.port;
+        } else if (PortPoolIsEmpty()) {
+          console.log(PRE + "--> No more ports.  Not spawning", db);
+          // b) No more ports available.  
+          return `http://localhost:${PORT_ROUTER}/error_out_of_ports`;
         } else {
-          // not defined yet, create a new one.
-          console.log(PRE + "--> not defined yet, starting", db);
-          // const routerUrlSpec = await SpawnApp(db);
-          // return routerUrlSpec; // {protocol, host, port}
+          // c) Not defined yet, Create a new one.
+          console.log(PRE + "--> not running yet, starting new", db);
           port = await SpawnApp(db);
         }
         return {
@@ -340,16 +329,30 @@ app.use(
           port: port,
         };
       },
+      // remove '/graph/db/' for the rerouted calls
+      // e.g. localhost/graph/hawaii/#/edit/mop => localhost:3000/#/edit/mop
       pathRewrite: function (path, req) {
-        const rewrite = path.replace(`/graph/${req.params.graph}`, '');
-        return rewrite; // remove `/?hawaii/'
+        return rewrite = path.replace(`/graph/${req.params.graph}`, '');
       },
-      target: `http://localhost:3000`, // default fallback
+      target: `http://localhost:3000`, // default fallback, router takes precedence
       ws: true,
       changeOrigin: true,
     }
   )
 );
+
+
+
+// HANDLE OUT OF PORTS -- RETURN ERROR
+app.get('/error_out_of_ports', (req, res) => {
+  console.log(PRE + '================== Handling ERROR OUT OF PORTS!')
+  res.set("Content-Type", "text/html");
+  res.send(
+    `<p>Ran out of ports.  Can't start the graph.</p>
+    <p><a href="/">Back to Multiplex</a></p>`
+  );
+});
+
 
 
 // HANDLE MISSING TRAILING ".../" -- RETURN ERROR
@@ -386,7 +389,7 @@ app.get('/kill/:graph/', (req, res) => {
   } else {
     response += "ERROR: No database found to kill: " + db;
   }
-  response += `<p><a href="/">Back to Manager</a></p>`;  
+  response += `<p><a href="/">Back to Multiplex</a></p>`;  
   
   res.send(response);
 });
@@ -402,7 +405,7 @@ app.get('/', (req, res) => {
   response += `<p>Updated: ${new Date().toLocaleTimeString()}</p >`;
 
   response += `<h3>Active Graphs</h3>`;
-  response += `<p>Number of Active Graphs: ${childProcesses.length-1} / ${processMax} (max)`;
+  response += `<p>Number of Active Graphs: ${childProcesses.length-1} / ${PROCESS_MAX} (max)`;
   response += `<p>"Stop" active graphs if you're not using them anymore.<br/>(Closing the window does not stop the graph.)</p>`;
   response +=
     "<table><thead><tr><td>Graph</td><td>Port</td><td>Websocket</td><td></td></tr></thead><tbody>";
@@ -464,6 +467,6 @@ app.use(
 ///////////////////////////////////////////////////////////////////////////////
 // START PROXY
 //
-app.listen(port_router, () =>
-  console.log(PRE + `running on port ${port_router}.`)
+app.listen(PORT_ROUTER, () =>
+  console.log(PRE + `running on port ${PORT_ROUTER}.`)
 );
