@@ -155,6 +155,10 @@ function ReleasePort(index) {
   port_pool.push(index);
 }
 
+/**
+ * Returns true if there are no more port indices left in the pool
+ * Used by /graph/<db>/ route to check if it should spawn a new app
+ */
 function PortPoolIsEmpty() {
   return port_pool.length < 1;
 }
@@ -187,11 +191,12 @@ async function SpawnApp(db) {
  * In general, don't call this directly.  Use SpawnApp.
  * 
  * This starts `nc-start.js` via a fork.
- * nc-start.js will generate netcreate-config.js and start
- * the brunch server.
+ * `nc-start.js` will generate the `netcreate-config.js` 
+ * configuration file, and then start the brunch server.
  * 
- * When nc-start.js has completed, it sends a message back
- * via fork messaging, at which point this promise is resolved.
+ * When `nc-start.js` has completed, it sends a message back
+ * via fork messaging, at which point this promise is resolved
+ * and then we redirect the user to the new port.
  * 
  * @param {string} db 
  * @resolve {object} sends the forked process and meta info
@@ -201,7 +206,7 @@ function PromiseApp(db) {
   return new Promise((resolve, reject) => {
     const ports = PickPort();
     if (ports === undefined) {
-      reject(`Too many graphs open already!  Graph ${childIndex} not created.`);
+      reject(`Unable to find a free port.  ${db} not created.`);
     }
 
     // 1. Define the fork
@@ -209,7 +214,7 @@ function PromiseApp(db) {
     
     // 2. Define fork success handler
     //    When the child node process is up and running, it will
-    //    send a message to this handler, which in turn
+    //    send a message back to this handler, which in turn
     //    sends the new spec back to SpawnApp
     forked.on("message", (msg) => {
       console.log(PRE + "Received message from spawned fork:", msg);

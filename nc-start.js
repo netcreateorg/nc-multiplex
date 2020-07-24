@@ -48,10 +48,7 @@ function promiseServer(port) {
   shell.cd('netcreate-2018/build');
   const server = require(`${pathToNetcreate}/brunch-server`);
   return new Promise((resolve, reject) => {
-    server({ port: port }, function () {
-      console.log(`\n*** NetCreate is running (classroom mode) on port ${port} ***\n`);
-      resolve();
-    });
+    server({ port }, () => resolve());
   });
 }
 
@@ -69,7 +66,7 @@ process.on("message", (data) => {
 
 async function startServer(port) {
   await promiseServer(port);
-  console.log(PRE + "3. Server started.!");
+  console.log(`${PRE} 3. Server started on port ${port}!`);
   process.send("nc-start.js: Completed!");  
 }
 

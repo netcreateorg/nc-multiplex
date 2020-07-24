@@ -196,3 +196,8 @@ Generally, you won't need to use the `--ip` option.
 `--ip` is for use with EC2 and docker implementations that default to a private ip network address.  In those cases, the public network ip is not visible to the `brunch-server` start script, and the system ends up using the private ip address for websockets, rendering it unreachable. Passing an IP address will force brunch to override the private ip address.
 
 
+* Running Node
+
+To keep node running, you'll need a process manager.
+
+On Ubuntu, you can use 
