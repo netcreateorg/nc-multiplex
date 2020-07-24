@@ -88,10 +88,10 @@ const PRE = '...nc-multiplex: ';
 
 
 // OPTIONS
-const PROCESS_MAX = 3; // Set this to limit the number of running processes
-                       // in order to keep a rein on CPU and MEM loads
-                       // If you set this higher than 100 you should make
-                       // sure you open inbound ports higher than 3100 and 4100
+const PROCESS_MAX = 100; // Set this to limit the number of running processes
+                         // in order to keep a rein on CPU and MEM loads
+                         // If you set this higher than 100 you should make
+                         // sure you open inbound ports higher than 3100 and 4100
 
 
 
