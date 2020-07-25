@@ -253,7 +253,8 @@ function PromiseApp(db) {
 }
 
 /**
- * Add Route only if it doesn't already exist
+ * Add the newProcess to the array of childProcesses
+ * but only if it doesn't already exist
  * @param {object} route 
  */
 function AddChildProcess(newProcess) {
@@ -270,20 +271,32 @@ function DBIsRunning(db) {
 }
 
 /**
+ * Return array of databases in the runtime folder
+ * Returns only files with a .loki extension
+ * and strips the extension from the filename.
+ */
+function GetDatabaseNamesArray() {
+  let files = fs.readdirSync("netcreate-2018/build/runtime/");
+  let dbs = [];
+  files.forEach(file => {
+    if (file.endsWith(".loki")) {
+      dbs.push( file.replace(".loki", "") );
+    }
+  });
+  return dbs;
+}
+
+/**
  * Returns a list of databases in the runtime folder
  * formatted as HTML <LI>s, with a link to open each graph.
  */
 function ListDatabases() {
   let response = '<ul>';
-  let files = fs.readdirSync("netcreate-2018/build/runtime/"); 
-  files.forEach((file) => {
-    if (file.endsWith(".loki")) {
-      let db = file.replace(".loki", "");
-      // Don't list dbs that are already open
-      if (!DBIsRunning(db)) response += `<li><a href="/graph/${db}/">${db}</a></li>`;
-    }
+  let dbs = GetDatabaseNamesArray();
+  dbs.forEach(db => {
+    // Don't list dbs that are already open
+    if (!DBIsRunning(db)) response += `<li><a href="/graph/${db}/">${db}</a></li>`;
   });
-  
   response += `</ul>`;
   return response;
 }
