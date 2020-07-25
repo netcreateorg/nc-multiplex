@@ -69,7 +69,9 @@
  
 */
 
-///// CONSTANTS ///////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////
+//
+//  CONSTANTS
 
 const { createProxyMiddleware } = require("http-proxy-middleware");
 const { fork } = require("child_process");
@@ -114,10 +116,25 @@ const googlea = argv["googlea"];
 const ip = argv["ip"];
 
 
+
+
 ///////////////////////////////////////////////////////////////////////////////
-// UTILITIES
+//
+//  UTILITIES
 
 
+
+/**
+ * Returns true if the db is currently running as a process
+ * @param {string} db
+ */
+function DBIsRunning(db) {
+  return childProcesses.find((route) => route.db === db);
+}
+
+
+
+///// PORT POOL ---------------------------------------------------------------
 
 // Initialize port pool
 //    port 0 is for the base app
@@ -125,7 +142,6 @@ const port_pool = []; // array of available port indices, usu [1...100]
 for (let i = 0; i <= PROCESS_MAX; i++ ) {
   port_pool.push(i);
 }
-
 /**
  * Gets the next available port from the pool.
  * 
@@ -148,7 +164,6 @@ function PickPort() {
   };
   return result;
 }
-
 /**
  * 
  * @param {integer} index -- Port index to return to the pool
@@ -158,7 +173,6 @@ function ReleasePort(index) {
     throw "ERROR: Port already in pool! This should not happen! " + index; 
   port_pool.push(index);
 }
-
 /**
  * Returns true if there are no more port indices left in the pool
  * Used by /graph/<db>/ route to check if it should spawn a new app
@@ -168,8 +182,34 @@ function PortPoolIsEmpty() {
 }
 
 
+
+
 ///////////////////////////////////////////////////////////////////////////////
-// PROCESS MANAGERS
+//
+//  RENDERERS
+
+/**
+ * Returns a list of databases in the runtime folder
+ * formatted as HTML <LI>s, with a link to open each graph.
+ */
+function ListDatabases() {
+  let response = "<ul>";
+  let dbs = DBUTILS.GetDatabaseNamesArray();
+  dbs.forEach((db) => {
+    // Don't list dbs that are already open
+    if (!DBIsRunning(db))
+      response += `<li><a href="/graph/${db}/">${db}</a></li>`;
+  });
+  response += `</ul>`;
+  return response;
+}
+
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+//
+//  PROCESS MANAGERS
 
 /**
  * Use this to spawn a new node instance
@@ -261,28 +301,6 @@ function AddChildProcess(newProcess) {
   childProcesses.push(newProcess);
 }
 
-/**
- * Returns true if the db is currently running as a process
- * @param {string} db 
- */
-function DBIsRunning(db) {
-  return childProcesses.find(route => route.db === db);
-}
-
-/**
- * Returns a list of databases in the runtime folder
- * formatted as HTML <LI>s, with a link to open each graph.
- */
-function ListDatabases() {
-  let response = '<ul>';
-  let dbs = GetDatabaseNamesArray();
-  dbs.forEach(db => {
-    // Don't list dbs that are already open
-    if (!DBIsRunning(db)) response += `<li><a href="/graph/${db}/">${db}</a></li>`;
-  });
-  response += `</ul>`;
-  return response;
-}
 
 /**
  * Used to check if we have enough memory to start a new node process
@@ -296,10 +314,9 @@ function OutOfMemory() {
 
 
 
-
-
 ///////////////////////////////////////////////////////////////////////////////
-// HTTP-PROXY-MIDDLEWARE ROUTING
+//
+//  HTTP-PROXY-MIDDLEWARE ROUTING
 //
 
 // ----------------------------------------------------------------------------
@@ -529,8 +546,9 @@ app.use(
 
 
 ///////////////////////////////////////////////////////////////////////////////
-// START PROXY
 //
+//  START PROXY
+
 app.listen(PORT_ROUTER, () =>
   console.log(PRE + `running on port ${PORT_ROUTER}.`)
 );
