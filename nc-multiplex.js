@@ -93,6 +93,11 @@ const PROCESS_MAX = 100; // Set this to limit the number of running processes
                          // If you set this higher than 100 you should make
                          // sure you open inbound ports higher than 3100 and 4100
 
+const MEMORY_MIN = 256;  // in MegaBytes
+                         // Don't start a new process if there is less than
+                         // MEMORY_MIN memory remaining.  
+                         // * Each node process is generally ~30 MB.
+                         // * Servers would hant with less than 100 MB remaining.
 
 
 // ----------------------------------------------------------------------------
@@ -283,6 +288,14 @@ function ListDatabases() {
   return response;
 }
 
+/**
+ * Used to check if we have enough memory to start a new node process
+ * This is used to prevent node from starting too many processes.
+ */
+function OutOfMemory() {
+  let mem = process.memoryUsage();
+  return mem.heapTotal / 1024 - mem.heapUsed / 1024 < MEMORY_MIN;
+}
 
 
 
@@ -345,6 +358,9 @@ app.use(
           console.log(PRE + "--> No more ports.  Not spawning", db);
           // b) No more ports available.  
           return `http://localhost:${PORT_ROUTER}/error_out_of_ports`;
+        } else if (OutOfMemory()) {
+          // c) Not enough memory to spawn new node instance
+          return `http://localhost:${PORT_ROUTER}/error_out_of_memory`;
         } else {
           // c) Not defined yet, Create a new one.
           console.log(PRE + "--> not running yet, starting new", db);
@@ -380,6 +396,16 @@ app.get('/error_out_of_ports', (req, res) => {
   );
 });
 
+
+// HANDLE OUT OF MEMORY -- RETURN ERROR
+app.get('/error_out_of_memory', (req, res) => {
+  console.log(PRE + '================== Handling ERROR OUT OF MEMORY!')
+  res.set("Content-Type", "text/html");
+  res.send(
+    `<p>Ran out of Memory.  Can't start the graph.</p>
+    <p><a href="/">Back to Multiplex</a></p>`
+  );
+});
 
 
 // HANDLE MISSING TRAILING ".../" -- RETURN ERROR
@@ -430,6 +456,10 @@ app.get('/', (req, res) => {
   let response = `<img src="/images/netcreate-logo.svg" alt="NetCreate Logo" width="300px">`;
   response +=  `<h1>NetCreate Multiplex</h1>`;
   response += `<p>Updated: ${new Date().toLocaleTimeString()}</p >`;
+  
+  let mem = process.memoryUsage();
+  response += `<p>Memory used: ${Math.trunc(mem.heapUsed/1024)} M / ${mem.heapTotal/1024} M (${(mem.heapUsed / mem.heapTotal).toFixed(2)}%)</p>`;
+  response += `<p>Out of memory: ${OutOfMemory()}</p>`
 
   response += `<h3>Active Graphs</h3>`;
   response += `<p>Number of Active Graphs: ${childProcesses.length-1} / ${PROCESS_MAX} (max)`;
