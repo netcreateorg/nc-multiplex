@@ -317,6 +317,49 @@ console.log(PRE);
 // requests.  This starts a generic "base" dataset at port 3000.
 SpawnApp('base');
 
+// ----------------------------------------------------------------------------
+// ROUTE FUNCTIONS
+
+/**
+ * RouterGraph
+ * @param {object} req 
+ * 
+ * The router function tries to route to the correct port by:
+ * a) if process is already running, use existing port
+ * b) if the process isn't running, spawn a new process
+ *    and pass the port
+ * c) if no more ports are available, redirect back to the root.
+ * 
+ */
+async function RouterGraph (req) {
+  const db = req.params.graph;
+  let port;
+  
+  // Is it already running?
+  let route = childProcesses.find(route => route.db === db);
+  if (route) {
+    // a) Yes. Use existing route!
+    console.log(PRE + '--> mapping to ', route.db, route.port);
+    port = route.port;
+  } else if (PortPoolIsEmpty()) {
+    console.log(PRE + "--> No more ports.  Not spawning", db);
+    // b) No more ports available.  
+    return `http://localhost:${PORT_ROUTER}/error_out_of_ports`;
+  } else if (OutOfMemory()) {
+    // c) Not enough memory to spawn new node instance
+    return `http://localhost:${PORT_ROUTER}/error_out_of_memory`;
+  } else {
+    // c) Not defined yet, Create a new one.
+    console.log(PRE + "--> not running yet, starting new", db);
+    port = await SpawnApp(db);
+  }
+  return {
+    protocol: "http:",
+    host: "localhost",
+    port: port,
+  };
+}
+
 
 // ----------------------------------------------------------------------------
 // ROUTES
@@ -335,42 +378,10 @@ app.use(
       return false;
     },
     {
-      // The router function tries to route to the correct port by:
-      // a) if process is already running, use existing port
-      // b) if the process isn't running, spawn a new process
-      //    and pass the port
-      // c) if no more ports are available, redirect back to the root.
-      router: async function (req) {
-        const db = req.params.graph;
-        let port;
-        
-        // Is it already running?
-        let route = childProcesses.find(route => route.db === db);
-        if (route) {
-          // a) Yes. Use existing route!
-          console.log(PRE + '--> mapping to ', route.db, route.port);
-          port = route.port;
-        } else if (PortPoolIsEmpty()) {
-          console.log(PRE + "--> No more ports.  Not spawning", db);
-          // b) No more ports available.  
-          return `http://localhost:${PORT_ROUTER}/error_out_of_ports`;
-        } else if (OutOfMemory()) {
-          // c) Not enough memory to spawn new node instance
-          return `http://localhost:${PORT_ROUTER}/error_out_of_memory`;
-        } else {
-          // c) Not defined yet, Create a new one.
-          console.log(PRE + "--> not running yet, starting new", db);
-          port = await SpawnApp(db);
-        }
-        return {
-          protocol: "http:",
-          host: "localhost",
-          port: port,
-        };
-      },
-      // remove '/graph/db/' for the rerouted calls
-      // e.g. localhost/graph/hawaii/#/edit/mop => localhost:3000/#/edit/mop
+      router: RouterGraph,
       pathRewrite: function (path, req) {
+        // remove '/graph/db/' for the rerouted calls
+        // e.g. localhost/graph/hawaii/#/edit/mop => localhost:3000/#/edit/mop
         return rewrite = path.replace(`/graph/${req.params.graph}`, '');
       },
       target: `http://localhost:3000`, // default fallback, router takes precedence
