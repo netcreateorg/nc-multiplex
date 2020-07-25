@@ -122,7 +122,10 @@ const ip = argv["ip"];
 //
 //  UTILITIES
 
-
+// stackoverflow.com/questions/2901102/how-to-print-a-number-with-commas-as-thousands-separators-in-javascript
+function numberWithCommas(x) {
+  return x.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+}
 
 /**
  * Returns true if the db is currently running as a process
@@ -192,7 +195,7 @@ function PortPoolIsEmpty() {
  * Returns a list of databases in the runtime folder
  * formatted as HTML <LI>s, with a link to open each graph.
  */
-function ListDatabases() {
+function RenderDatabaseList() {
   let response = "<ul>";
   let dbs = DBUTILS.GetDatabaseNamesArray();
   dbs.forEach((db) => {
@@ -204,7 +207,83 @@ function ListDatabases() {
   return response;
 }
 
+function RenderActiveGraphsList() {
+  let response = `<h3>Active Graphs</h3>`;
+  response +=
+    "<table><thead><tr><td>Graph</td><td>Port</td><td>Websocket</td><td></td></tr></thead><tbody>";
+  childProcesses.forEach((route, index) => {
+    let kill = `<a href="/kill/${route.db}/">stop</a>`;
+    if (index < 1) kill = ""; // Don't allow BASE to be killed.
+    response += `<tr><td>
+<a href="/graph/${route.db}/" target="${route.db}">${route.db}</a>
+</td><td>${route.port}</td><td>${route.netport}</td><td>${kill}<td></tr>`;
+  });
+  response += `</tbody></table>`;
+  response += `<p>Number of Active Graphs: ${
+    childProcesses.length - 1
+  } / ${PROCESS_MAX} (max)`;
+  response += `<p>"Stop" active graphs if you're not using them anymore.<br/>(Closing the window does not stop the graph.)</p>`;
+  return response;  
+}
 
+function RenderAvailableGraphsList() {
+  let response = `<h3>Available Graphs</h3>`;
+  response += `<p>Graph/database files on server.  Click link to open.</p>`;
+  response += RenderDatabaseList();
+  return response;
+}
+
+function RenderNewGraphForm() {
+  return `
+<div>
+  <input placeholder="Enter new graph name"> <button>Create New Database</button>  
+</div>`;
+}
+
+function RenderGenerateTokensForm() {
+  // Make Tokens
+  let items = childProcesses.reduce(
+    (acc, curr) =>
+      acc + "<option value='" + curr.db + "'>" + curr.db + "</option>",
+    ""
+  );
+  items += DBUTILS.GetDatabaseNamesArray().reduce(
+    (acc, curr) => acc + "<option value='" + curr + "'>" + curr + "</option>",
+    ""
+  );
+  let response = `
+<script>
+  function makeTokens() {
+    console.log('make tokens')
+  }
+</script>
+<h3>Generate Tokens</h3>
+<div>
+  <select>
+    ${items}
+  </select>
+  <input id="classid" placeholder="Class ID e.g. 'PER1'"> 
+  <input id="projid" placeholder="Project ID e.g. 'ROME'"> 
+  <input id="count" value="10">
+  <button onclick="makeTokens()">Generate Tokens</button><br/>
+  <textarea rows="10"></textarea>
+  <p>Enter 1) a class id, 2) a project id, and 3) number of tokens to generate.  Then click "Generate Tokens".</p>
+</div>
+  `;
+                                    
+  return response;
+}
+
+function RenderMemoryReport() {
+  const mem = process.memoryUsage();
+  let response = `<p>MEMORY :: Used: 
+    ${numberWithCommas(Math.trunc(mem.heapUsed / 1024))}mb / 
+    ${numberWithCommas(mem.heapTotal / 1024)}mb 
+    (${(mem.heapUsed / mem.heapTotal).toFixed(2)}%) `;
+  response += ` :: Remaining: ${numberWithCommas( Math.trunc((mem.heapTotal-mem.heapUsed)/1024) )}mb`;
+  response += ` :: Out of memory: ${OutOfMemory()}</p>`;
+  return response;  
+}
 
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -437,8 +516,7 @@ app.get('/graph/:file', (req, res) => {
   console.log(PRE + '================== Handling BAD URL!')
   res.set("Content-Type", "text/html");
   res.send(
-    `Bad URL.  
-    Missing trailing "/".
+    `Bad URL. Missing trailing "/".
     Perhaps you meant <a href="${req.originalUrl}/">${req.originalUrl}/</a>`
   );
 });
@@ -475,34 +553,18 @@ app.get('/kill/:graph/', (req, res) => {
 // HANDLE "/" -- MANAGER PAGE
 app.get('/', (req, res) => {
   console.log(PRE + "================== Handling / ROOT!");
-  
+
   res.set("Content-Type", "text/html");
   let response = `<img src="/images/netcreate-logo.svg" alt="NetCreate Logo" width="300px">`;
-  response +=  `<h1>NetCreate Multiplex</h1>`;
+  response += `<h1>NetCreate Multiplex</h1>`;
+  
+  response += RenderActiveGraphsList() + `<hr>`;
+  response += RenderAvailableGraphsList() + `<hr>`;
+  response += RenderNewGraphForm() + `<hr>`; 
+  response += RenderGenerateTokensForm() + `<hr>`;
+  response += RenderMemoryReport();
   response += `<p>Updated: ${new Date().toLocaleTimeString()}</p >`;
-  
-  let mem = process.memoryUsage();
-  response += `<p>Memory used: ${Math.trunc(mem.heapUsed/1024)} M / ${mem.heapTotal/1024} M (${(mem.heapUsed / mem.heapTotal).toFixed(2)}%)</p>`;
-  response += `<p>Out of memory: ${OutOfMemory()}</p>`
 
-  response += `<h3>Active Graphs</h3>`;
-  response += `<p>Number of Active Graphs: ${childProcesses.length-1} / ${PROCESS_MAX} (max)`;
-  response += `<p>"Stop" active graphs if you're not using them anymore.<br/>(Closing the window does not stop the graph.)</p>`;
-  response +=
-    "<table><thead><tr><td>Graph</td><td>Port</td><td>Websocket</td><td></td></tr></thead><tbody>";
-  childProcesses.forEach((route, index) => {
-    let kill = `<a href="/kill/${route.db}/">stop</a>`;
-    if (index < 1) kill = ''; // Don't allow BASE to be killed.
-    response += `<tr><td>
-<a href="/graph/${route.db}/" target="${route.db}">${route.db}</a>
-</td><td>${route.port}</td><td>${route.netport}</td><td>${kill}<td></tr>`;
-  });
-  response += `</tbody></table>`;
-  
-  response += `<h3>Available Graphs</h3>`;
-  response += `<p>Graph/database files on server.  Click link to open.</p>`;
-  response += ListDatabases();
-  
   res.send(response);
 });
 
@@ -519,14 +581,11 @@ app.get('/', (req, res) => {
 // This HAS to come LAST!
 // 
 app.use(
-  createProxyMiddleware(
-    '/',
-    {
-      target: `http://localhost:3000`,
-      ws: true,
-      changeOrigin: true,
-    }
-  )
+  createProxyMiddleware("/", {
+    target: `http://localhost:3000`,
+    ws: true,
+    changeOrigin: true,
+  })
 );
 
 
