@@ -122,7 +122,12 @@ const ip = argv["ip"];
 //
 //  UTILITIES
 
-// stackoverflow.com/questions/2901102/how-to-print-a-number-with-commas-as-thousands-separators-in-javascript
+/**
+ * Number formatter
+ * From stackoverflow.com/questions/2901102/how-to-print-a-number-with-commas-as-thousands-separators-in-javascript
+ * @param {integer} x 
+ * @return {string} Number formatted with commas, e.g. 123,456
+ */
 function numberWithCommas(x) {
   return x.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
 }
@@ -208,46 +213,57 @@ function RenderDatabaseList() {
 }
 
 function RenderActiveGraphsList() {
-  let response = `<h3>Active Graphs</h3>`;
-  response +=
-    "<table><thead><tr><td>Graph</td><td>Port</td><td>Websocket</td><td></td></tr></thead><tbody>";
+  let response = `<div>`;
+  response += `<h3>Active Graphs</h3>
+    <table>
+      <thead>
+        <tr>
+          <td>Graph</td><td>Port</td><td>Websocket</td><td></td>
+        </tr>
+      </thead>
+      <tbody>  
+  `;
   childProcesses.forEach((route, index) => {
     let kill = `<a href="/kill/${route.db}/">stop</a>`;
     if (index < 1) kill = ""; // Don't allow BASE to be killed.
-    response += `<tr><td>
-<a href="/graph/${route.db}/" target="${route.db}">${route.db}</a>
-</td><td>${route.port}</td><td>${route.netport}</td><td>${kill}<td></tr>`;
+    response += `
+      <tr>
+        <td><a href="/graph/${route.db}/" target="${route.db}">${route.db}</a></td>
+        <td>${route.port}</td><td>${route.netport}</td><td>${kill}<td>
+      </tr>`;
   });
   response += `</tbody></table>`;
-  response += `<p>Number of Active Graphs: ${
-    childProcesses.length - 1
-  } / ${PROCESS_MAX} (max)`;
+  response += `<p>Number of Active Graphs: ${childProcesses.length - 1} / ${PROCESS_MAX} (max)`;
   response += `<p>"Stop" active graphs if you're not using them anymore.<br/>(Closing the window does not stop the graph.)</p>`;
+  response += `</div>`;
   return response;  
 }
 
-function RenderAvailableGraphsList() {
-  let response = `<h3>Available Graphs</h3>`;
-  response += `<p>Graph/database files on server.  Click link to open.</p>`;
+function RenderSavedGraphsList() {
+  let response = `<div>`;
+  response += `<h3>Saved Graphs</h3>`;
+  response += `<p>Graph/database files saved on server.  Click to open.</p>`;
   response += RenderDatabaseList();
+  response += `</div>`;
   return response;
 }
 
 function RenderNewGraphForm() {
   return `
-<div>
-  <input placeholder="Enter new graph name"> <button>Create New Database</button>  
-</div>`;
+    <div>
+      <h3>New Graph</h3>
+      <input placeholder="Enter new graph name"> <button>Create New Database</button>  
+    </div>`;
 }
 
 function RenderGenerateTokensForm() {
-  // Make Tokens
-  let items = childProcesses.reduce(
+  let response = `<div>`;
+  let dbnames = childProcesses.reduce(
     (acc, curr) =>
       acc + "<option value='" + curr.db + "'>" + curr.db + "</option>",
     ""
   );
-  items += DBUTILS.GetDatabaseNamesArray().reduce(
+  dbnames += DBUTILS.GetDatabaseNamesArray().reduce(
     (acc, curr) => acc + "<option value='" + curr + "'>" + curr + "</option>",
     ""
   );
@@ -488,6 +504,8 @@ app.use(
 );
 
 
+// -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -
+// ERROR HANDLERS
 
 // HANDLE OUT OF PORTS -- RETURN ERROR
 app.get('/error_out_of_ports', (req, res) => {
@@ -522,6 +540,9 @@ app.get('/graph/:file', (req, res) => {
 });
 
 
+// -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -
+// UTILITIES
+
 // HANDLE "/kill/:graph" -- KILL REQUEST
 app.get('/kill/:graph/', (req, res) => {
   console.log(PRE + "================== Handling / KILL!");
@@ -550,18 +571,28 @@ app.get('/kill/:graph/', (req, res) => {
 });
 
 
+  
+  
+  
+// -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -
+// MAIN
+
+
 // HANDLE "/" -- MANAGER PAGE
 app.get('/', (req, res) => {
   console.log(PRE + "================== Handling / ROOT!");
 
   res.set("Content-Type", "text/html");
-  let response = `<img src="/images/netcreate-logo.svg" alt="NetCreate Logo" width="300px">`;
-  response += `<h1>NetCreate Multiplex</h1>`;
+  let response = `<h1><img src="/images/netcreate-logo.svg" alt="NetCreate Logo" width="100px"> Multiplex</h1>`;
   
-  response += RenderActiveGraphsList() + `<hr>`;
-  response += RenderAvailableGraphsList() + `<hr>`;
+  response += `<div style="display: flex">`
+  response += RenderActiveGraphsList();
+  response += RenderSavedGraphsList();
+  response += `</div><hr>`;
+  response += `<div style="display: flex">`;
   response += RenderNewGraphForm() + `<hr>`; 
-  response += RenderGenerateTokensForm() + `<hr>`;
+  response += RenderGenerateTokensForm();
+  response += `</div><hr>`;
   response += RenderMemoryReport();
   response += `<p>Updated: ${new Date().toLocaleTimeString()}</p >`;
 
@@ -569,6 +600,7 @@ app.get('/', (req, res) => {
 });
 
 
+// -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -
 // HANDLE STATIC FILES
 //
 // Route Everything else to :3000
@@ -588,6 +620,8 @@ app.use(
   })
 );
 
+
+// ----------------------------------------------------------------------------
 
 // `request` parameters reference
 //

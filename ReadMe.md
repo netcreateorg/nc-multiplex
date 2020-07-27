@@ -65,6 +65,8 @@ Alternatively you can use `npm run package` to do it without running the app.
 
 The NetCreate instances spun up by `nc-multiplex` will use the shared compiled code for each NetCreate instance.
 
+IMPORTANT: Every time you pull a new version of netcreate-2018, you need to recompile, otherwise, nc-multiplex will use the old compiled code.
+
 
 #### 4. Start Reverse Proxy Server
 ```
