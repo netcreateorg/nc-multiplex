@@ -75,9 +75,12 @@
 
 const { createProxyMiddleware } = require("http-proxy-middleware");
 const { fork } = require("child_process");
-const DBUTILS = require("./modules/db-utils.js");
+const fs = require("fs");
+const path = require("path");
 const express = require("express");
 const app = express();
+
+const DBUTILS = require("./modules/db-utils.js");
 
 const PORT_ROUTER = 80;
 const PORT_APP = 3000; // base port for nc apps
@@ -115,6 +118,16 @@ const argv = require("minimist")(process.argv.slice(2));
 const googlea = argv["googlea"];
 const ip = argv["ip"];
 
+
+// ----------------------------------------------------------------------------
+// CHECK HOME PAGE OVERRIDE
+//
+// If there's a 'home.html' file, serve that at '/'.
+// 
+let HOMEPAGE_EXISTS = false;
+fs.access("home.html", fs.constants.R_OK, (err) => {
+  if (!err) HOMEPAGE_EXISTS = true;
+});
 
 
 
@@ -575,12 +588,12 @@ app.get('/kill/:graph/', (req, res) => {
   
   
 // -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -
-// MAIN
+// MANAGE
 
 
-// HANDLE "/" -- MANAGER PAGE
-app.get('/', (req, res) => {
-  console.log(PRE + "================== Handling / ROOT!");
+// HANDLE "/manage" -- MANAGER PAGE
+app.get('/manage', (req, res) => {
+  console.log(PRE + "================== Handling / MANAGE!");
 
   res.set("Content-Type", "text/html");
   let response = `<h1><img src="/images/netcreate-logo.svg" alt="NetCreate Logo" width="100px"> Multiplex</h1>`;
@@ -597,6 +610,26 @@ app.get('/', (req, res) => {
   response += `<p>Updated: ${new Date().toLocaleTimeString()}</p >`;
 
   res.send(response);
+});
+
+
+
+// -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -
+// HOME
+
+
+// HANDLE "/" -- HOME PAGE
+app.get('/', (req, res) => {
+  console.log(PRE + "================== Handling / ROOT!");
+  
+  if (HOMEPAGE_EXISTS) {
+    res.sendFile(path.join(__dirname, 'home.html'));
+  } else {
+    res.set("Content-Type", "text/html");
+    let response = `<h1><img src="/images/netcreate-logo.svg" alt="NetCreate Logo" width="100px"> Multiplex</h1>`;
+    response += `<p>Please contact Professor Kalani Craig, Institute for Digital Arts & Humanities at (812) 856-5721 (BH) or craigkl@indiana.edu with questions or concerns and/or to request information contained on this website in an accessible format.</p>`;
+    res.send(response);
+  }
 });
 
 

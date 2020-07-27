@@ -68,7 +68,13 @@ The NetCreate instances spun up by `nc-multiplex` will use the shared compiled c
 IMPORTANT: Every time you pull a new version of netcreate-2018, you need to recompile, otherwise, nc-multiplex will use the old compiled code.
 
 
-#### 4. Start Reverse Proxy Server
+#### 4. Set your Home Page
+If you would like a custom home page, add a file called `home.html` to the root folder at `nc-multiplex/home.html`.
+
+If no `home.html` page is found, the app will display a NetCreate logo and contact information at `http://localhost/`.
+
+
+#### 5. Start Reverse Proxy Server
 ```
 cd ~/your-dev-folder/nc-multiplex
 node nc-multiplex.js
@@ -85,12 +91,12 @@ analytics code. e.g.:
 See "Caveats" below for more information.
 
 
-#### 5. View the manager
+#### 6. View the manager
 ```
 http://localhost
 ```
 
-#### 6. Starting New Graphs
+#### 7. Starting New Graphs
 
 To start a new graph:
   `http://localhost/graph/tacitus/`
@@ -106,7 +112,7 @@ Refresh the manager to view the current list of running databases.
 **IMPORTANT**: The trailing "/" is necessary in the URL.  The system will warn you if you try to start a database without it, e.g. `http://localhost/graph/tacitus`.  This is necessary because we would otherwise be unable to distinguish between new graph requests and static file requests.
 
 
-#### 7. Load Exisitng Graph
+#### 8. Load Exisitng Graph
 
 The manager lists all the graphs it finds on in the `~/your-dev-folder/nc-multiplex/netcreate-2018/build/runtime/` folder.  You can click on the link to start the graph.
 
@@ -162,6 +168,11 @@ Anyone can view any database running on the server.
 * No limits on creating
 
 Anyone can create as many new databases as they want, using any name they choose.  If the name exists, the system will load the existing db.  There is currently no error checking here.  So you may end up with many hundreds of databases over time.
+
+* `home.html`
+
+To keep things simple and slightly more secure, you can't include any files with the home page, e.g. no images, css, or js.  The one exception is you can use NetCreate's logo: `<img src="/images/netcreate-logo.svg">` 
+
 
 
 # Installing in the Cloud
