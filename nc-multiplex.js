@@ -103,6 +103,12 @@ const MEMORY_MIN = 256;  // in MegaBytes
                          // * Each node process is generally ~30 MB.
                          // * Servers would hant with less than 100 MB remaining.
 
+const ALLOW_NEW = false; // default = false
+                         // set to true to allow auto-spawning a new database via
+                         // url.  e.g. going to `http://localhost/graph/newdb/` 
+                         // would automatically create a new database if it
+                         // didn't already exist
+
 
 // ----------------------------------------------------------------------------
 // READ OPTIONAL ARGUMENTS
@@ -473,10 +479,13 @@ async function RouterGraph (req) {
   } else if (OutOfMemory()) {
     // c) Not enough memory to spawn new node instance
     return `http://localhost:${PORT_ROUTER}/error_out_of_memory`;
-  } else {
+  } else if (ALLOW_NEW) {
     // c) Not defined yet, Create a new one.
     console.log(PRE + "--> not running yet, starting new", db);
     port = await SpawnApp(db);
+  } else {
+    // c) Not defined yet.  Report error.
+    return `http://localhost:${PORT_ROUTER}/error_no_database`;
   }
   return {
     protocol: "http:",
@@ -519,6 +528,17 @@ app.use(
 
 // -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -
 // ERROR HANDLERS
+
+// HANDLE NO DATABASE -- RETURN ERROR
+app.get('/error_no_database', (req, res) => {
+  console.log(PRE + '================== Handling ERROR NO DATABASE!')
+  res.set("Content-Type", "text/html");
+  res.send(
+    `<p>Database does not exist.</p>
+    <p><a href="/">Back to Multiplex</a></p>`
+  );
+});
+
 
 // HANDLE OUT OF PORTS -- RETURN ERROR
 app.get('/error_out_of_ports', (req, res) => {
@@ -616,7 +636,6 @@ app.get('/manage', (req, res) => {
 
 // -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -
 // HOME
-
 
 // HANDLE "/" -- HOME PAGE
 app.get('/', (req, res) => {
