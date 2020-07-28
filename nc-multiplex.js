@@ -243,8 +243,9 @@ function GetHash(pw) {
  * HASH is generated from the PASSWORD
  * @param {string} pw 
  */
-function CookieIsValid(pw) {
+function CookieIsValid(req) {
   // check against hash
+  let pw = req.cookies["nc-multiplex-auth"];
   return pw === PASSWORD_HASH;
 }
 
@@ -750,7 +751,7 @@ app.get('/maketoken/:clsid/:projid/:dataset/:numgroups', (req, res) => {
 // also handle post
 app.get('/manage', (req, res) => {
   console.log(PRE + "================== Handling / MANAGE!");
-  if (CookieIsValid(req.cookies["nc-multiplex-auth"]) ) {
+  if (CookieIsValid(req) ) {
     res.set("Content-Type", "text/html");
     res.send( RenderManager() );
   } else {
@@ -760,7 +761,7 @@ app.get('/manage', (req, res) => {
 
 app.get('/login', (req, res) => {
   console.log(PRE + "================== Handling / LOGIN!");
-  if (CookieIsValid(req.cookies["nc-multiplex-auth"])) {
+  if (CookieIsValid(req)) {
     // Cookie already set, no need to log in, redirect to manage
     res.redirect(`http://localhost:${PORT_ROUTER}/manage`);
   } else {
