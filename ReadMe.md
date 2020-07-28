@@ -77,12 +77,13 @@ If no `home.html` page is found, the app will display a NetCreate logo and conta
 #### 5. Set your Password
 By default, the password is `kpop`.  We **strongly recommend** you set a custom password.  
 
-To set a new password, create a text file named `SESAME` containing just your password text (no line feed), and place it in the root `/nc-multiplex` folder.
+To set a new password, create a text file named `SESAME` containing just your password text (no line feed), and place it in the root `/nc-multiplex` folder. Make sure you don't inadvertently insert a **newline** at the end of the file.
 
 Or you can:
 1. `ssh` to your machine
 2. `cd your-dev-folder/nc-multiplex`
 3. `printf "yourpassword" > SESAME`
+
 
 
 #### 6. Start Reverse Proxy Server
@@ -172,7 +173,7 @@ All databases are stored in the NetCreate runtime folder, e.g. `~/your-dev-folde
 
 * Note you no longer need to use the `?` method to retrieve a specific database.  (It applies only to standalone mode anyway).  e.g. just use `localhost/graph/tacitus/` instead of `localhost/?dataset=2020-02-06_Tacitus#/`
 
-
+* The database named "base" is always started on port 3000 to handle static file requests.  You shouldn't need to touch this graph.
 
 
 ## How it works
@@ -259,4 +260,11 @@ Generally, you won't need to use the `--ip` option.
 
 To keep node running, you'll need a process manager.
 
-On Ubuntu, you can use 
+On Ubuntu, you can use pm.
+
+
+* Memory Limits
+
+In our limited testing, each node process seemed to take about 18 - 28MB.  On a system with 1 Gig of memory, running Ubuntu 18.04, the base system started at 192MB.  We were able to run about 30 instances before the system would crash, with the memory reported by htop at about 850+MB out of 979MB.
+
+So setting `PROCESS_MAX` to 30 is probably a safer maximum.

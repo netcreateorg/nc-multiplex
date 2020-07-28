@@ -120,7 +120,7 @@ let PASSWORD; // Either default password or password in `SESAME` file
 let PASSWORD_HASH; // Hash generated from password
 
 // OPTIONS
-const PROCESS_MAX = 100; // Set this to limit the number of running processes
+const PROCESS_MAX = 30;  // Set this to limit the number of running processes
                          // in order to keep a rein on CPU and MEM loads
                          // If you set this higher than 100 you should make
                          // sure you open inbound ports higher than 3100 and 4100
