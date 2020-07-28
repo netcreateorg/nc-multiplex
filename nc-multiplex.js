@@ -90,6 +90,8 @@ let childProcesses = []; // array of forked process + meta info = { db, port, ne
 
 const PRE = '...nc-multiplex: ';
 
+// SETTINGS
+let HOMEPAGE_EXISTS; // Flag for existence of home.html override
 
 // OPTIONS
 const PROCESS_MAX = 100; // Set this to limit the number of running processes
@@ -126,14 +128,19 @@ const ip = argv["ip"];
 
 
 // ----------------------------------------------------------------------------
-// CHECK HOME PAGE OVERRIDE
+// SET HOME PAGE OVERRIDE
 //
 // If there's a 'home.html' file, serve that at '/'.
 // 
-let HOMEPAGE_EXISTS = false;
-fs.access("home.html", fs.constants.R_OK, (err) => {
-  if (!err) HOMEPAGE_EXISTS = true;
-});
+try {
+  fs.accessSync("home.html", fs.constants.R_OK, (err) => {
+    if (!err) HOMEPAGE_EXISTS = true;
+  });
+} catch (err) {
+  // no home page, use default
+  HOMEPAGE_EXISTS = false;
+}
+
 
 
 
