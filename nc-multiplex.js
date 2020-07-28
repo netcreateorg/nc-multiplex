@@ -264,6 +264,7 @@ function GetHash(pw) {
  * @param {string} pw 
  */
 function CookieIsValid(req) {
+  if (!req || !req.cookies) return false;
   // check against hash
   let pw = req.cookies["nc-multiplex-auth"];
   return pw === PASSWORD_HASH;
@@ -646,6 +647,7 @@ SpawnApp('base');
 async function RouterGraph (req) {
   const db = req.params.graph;
   let port;
+  let path = '';
   
   // Authenticate to allow spawning
   let ALLOW_SPAWN = false;
@@ -662,22 +664,23 @@ async function RouterGraph (req) {
   } else if (PortPoolIsEmpty()) {
     console.log(PRE + "--> No more ports.  Not spawning", db);
     // b) No more ports available.  
-    return `/error_out_of_ports`;
+    path = `/error_out_of_ports`;
   } else if (OutOfMemory()) {
     // c) Not enough memory to spawn new node instance
-    return `/error_out_of_memory`;
+    path = `/error_out_of_memory`;
   } else if (ALLOW_NEW || ALLOW_SPAWN) {
     // c) Not defined yet, Create a new one.
     console.log(PRE + "--> not running yet, starting new", db);
     port = await SpawnApp(db);
   } else {
     // c) Not defined yet.  Report error.
-    return `/error_no_database`;
+    path = `/error_no_database`;
   }
   return {
     protocol: "http:",
     host: "localhost",
     port: port,
+    path: path
   };
 }
 
