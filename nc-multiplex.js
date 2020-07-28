@@ -662,17 +662,17 @@ async function RouterGraph (req) {
   } else if (PortPoolIsEmpty()) {
     console.log(PRE + "--> No more ports.  Not spawning", db);
     // b) No more ports available.  
-    return `http://localhost:${PORT_ROUTER}/error_out_of_ports`;
+    return `/error_out_of_ports`;
   } else if (OutOfMemory()) {
     // c) Not enough memory to spawn new node instance
-    return `http://localhost:${PORT_ROUTER}/error_out_of_memory`;
+    return `/error_out_of_memory`;
   } else if (ALLOW_NEW || ALLOW_SPAWN) {
     // c) Not defined yet, Create a new one.
     console.log(PRE + "--> not running yet, starting new", db);
     port = await SpawnApp(db);
   } else {
     // c) Not defined yet.  Report error.
-    return `http://localhost:${PORT_ROUTER}/error_no_database`;
+    return `/error_no_database`;
   }
   return {
     protocol: "http:",
@@ -850,7 +850,7 @@ app.get('/manage', (req, res) => {
     res.set("Content-Type", "text/html");
     res.send( RenderManager() );
   } else {
-    res.redirect(`http://localhost:${PORT_ROUTER}/login`);
+    res.redirect(`/login`);
   }
 });
 
@@ -858,7 +858,7 @@ app.get('/login', (req, res) => {
   console.log(PRE + "================== Handling / LOGIN!");
   if (CookieIsValid(req)) {
     // Cookie already set, no need to log in, redirect to manage
-    res.redirect(`http://localhost:${PORT_ROUTER}/manage`);
+    res.redirect(`/manage`);
   } else {
     // Show login form
     res.set("Content-Type", "text/html");
@@ -873,9 +873,9 @@ app.post('/authorize', (req, res) => {
     res.cookie("nc-multiplex-auth", PASSWORD_HASH, {
       maxAge: AUTH_MINUTES * 60 * 1000,
     }); // ms
-    res.redirect(`http://localhost:${PORT_ROUTER}/manage`);
+    res.redirect(`/manage`);
   } else {
-    res.redirect(`http://localhost:${PORT_ROUTER}/error_not_authorized`);
+    res.redirect(`/error_not_authorized`);
   }
 });
 
