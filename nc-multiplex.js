@@ -564,6 +564,7 @@ function PromiseApp(db) {
         port: ports.appport,
         netport: ports.netport,
         portindex: ports.index,
+        googlea: googlea,
         process: forked
       };
       resolve(newProcessDef); // pass to SpawnApp
