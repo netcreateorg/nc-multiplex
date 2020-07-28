@@ -250,6 +250,7 @@ function CookieIsValid(req) {
 }
 
 
+
 ///// PORT POOL ---------------------------------------------------------------
 
 // Initialize port pool
@@ -306,14 +307,32 @@ function PortPoolIsEmpty() {
 
 const logoHtml = '<h1><img src="/images/netcreate-logo.svg" alt="NetCreate Logo" width="100px"> Multiplex</h1>';
 
+function RenderLoginForm() {
+  return `
+      <form action="/authorize" method="post">
+        <label>Password: <input name="password" type="password" autofocus/></label>
+        <input type="submit" />
+      </form>
+`;
+}
 function RenderManager() {
   let response = logoHtml;
+  response += `<script>
+    setInterval( ()=> {
+      if (!document.cookie.includes('nc-multiplex-auth')) {
+        document.getElementById('login').style.display = 'block';
+        document.getElementById('graphs').style.display = 'none';
+        document.getElementById('forms').style.display = 'none';
+      };
+    }, 3000);
+  </script>`;
+  response += `<div id="login" style="display: none">` + RenderLoginForm() + `</div>`;
   response += `<style>.box { background-color: #EEF; padding: 20px; margin: 0 0 20px 20px}</style>`
-  response += `<div style="display: flex;">`;
+  response += `<div id="graphs" style="display: flex;">`;
   response += RenderActiveGraphsList();
   response += RenderSavedGraphsList();
   response += `</div>`;
-  response += `<div style="display: flex">`;
+  response += `<div id="forms" style="display: flex">`;
   response += RenderNewGraphForm();
   response += RenderGenerateTokensForm();
   response += `</div>`;
@@ -402,7 +421,7 @@ function RenderNewGraphForm() {
       <label>Enter a short alphanumeric name for the database.  No spaces, no punctuation.
         <form>
           <input id="dbname" placeholder="Enter new graph name" required pattern="^[a-zA-Z0-9]+$"> 
-          <button onclick="OpenGraph()">Create New Database</button>
+          <button onclick="OpenGraph()">Create New Graph</button>
         </form>
       </label>
    </div>`;
@@ -801,19 +820,12 @@ app.get('/login', (req, res) => {
   } else {
     // Show login form
     res.set("Content-Type", "text/html");
-    res.send(`
-      ${logoHtml}
-      <form action="/authorize" method="post">
-        <label>Password: <input name="password" type="password" /></label>
-        <input type="submit" />
-      </form>
-    `);
+    res.send(logoHtml + RenderLoginForm());
   }
 });
 
 app.post('/authorize', (req, res) => {
   console.log(PRE + "================== Handling / AUTHORIZE!");
-  
   let str = new String(req.body.password);
   if ( req.body.password === PASSWORD ) {
     res.cookie("nc-multiplex-auth", PASSWORD_HASH, {
@@ -833,7 +845,6 @@ app.post('/authorize', (req, res) => {
 // HANDLE "/" -- HOME PAGE
 app.get('/', (req, res) => {
   console.log(PRE + "================== Handling / ROOT!");
-  
   if (HOMEPAGE_EXISTS) {
     res.sendFile(path.join(__dirname, 'home.html'));
   } else {
