@@ -159,6 +159,40 @@ function DBIsRunning(db) {
   return childProcesses.find((route) => route.db === db);
 }
 
+/**
+ * Generates a list of tokens using the NetCreate commoon-session module
+ * REVIEW: Requiring a module from the secondary netcreate-2018 repo
+ * is a little iffy.
+ * @param {string} clsId 
+ * @param {string} projId 
+ * @param {string} dataset 
+ * @param {integer} numGroups 
+ * @return {string}
+ */
+function MakeToken(clsId, projId, dataset, numGroups) {
+  const SESSION = require("./netcreate-2018/build/app/unisys/common-session.js");
+  // from nc-logic.js
+  if (typeof clsId !== "string")
+    return "args: str classId, str projId, str dataset, int numGroups";
+  if (typeof projId !== "string")
+    return "args: str classId, str projId, str dataset, int numGroups";
+  if (typeof dataset !== "string")
+    return "args: str classId, str projId, str dataset, int numGroups";
+  if (clsId.length > 12) return "classId arg1 should be 12 chars or less";
+  if (projId.length > 12) return "classId arg1 should be 12 chars or less";
+  if (!Number.isInteger(numGroups)) return "numGroups arg3 must be integer";
+  if (numGroups < 1) return "numGroups arg3 must be positive integer";
+
+  let out = `TOKEN LIST for class '${clsId}' project '${projId}' dataset '${dataset}'\n\n`;
+  let pad = String(numGroups).length;
+  for (let i = 1; i <= numGroups; i++) {
+    let id = String(i);
+    id = id.padStart(pad, "0");
+    out += `group ${id}\t${SESSION.MakeToken(clsId, projId, i, dataset)}\n`;
+  }
+  return out;
+}
+
 
 
 ///// PORT POOL ---------------------------------------------------------------
@@ -214,6 +248,24 @@ function PortPoolIsEmpty() {
 ///////////////////////////////////////////////////////////////////////////////
 //
 //  RENDERERS
+
+const logoHtml = '<h1><img src="/images/netcreate-logo.svg" alt="NetCreate Logo" width="100px"> Multiplex</h1>';
+
+function RenderManager() {
+  let response = logoHtml;
+  response += `<style>.box { background-color: #EEF; padding: 20px; margin: 0 0 20px 20px}</style>`
+  response += `<div style="display: flex;">`;
+  response += RenderActiveGraphsList();
+  response += RenderSavedGraphsList();
+  response += `</div>`;
+  response += `<div style="display: flex">`;
+  response += RenderNewGraphForm();
+  response += RenderGenerateTokensForm();
+  response += `</div>`;
+  response += RenderMemoryReport();
+  response += `<p>Updated: ${new Date().toLocaleTimeString()}</p >`;
+  return response;
+}
 
 /**
  * Returns a list of databases in the runtime folder
@@ -286,26 +338,34 @@ function RenderGenerateTokensForm() {
     (acc, curr) => acc + "<option value='" + curr + "'>" + curr + "</option>",
     ""
   );
-  let response = `
-<script>
-  function makeTokens() {
-    console.log('make tokens')
-  }
-</script>
-<h3>Generate Tokens</h3>
-<div>
-  <select>
-    ${items}
-  </select>
-  <input id="classid" placeholder="Class ID e.g. 'PER1'"> 
-  <input id="projid" placeholder="Project ID e.g. 'ROME'"> 
-  <input id="count" value="10">
-  <button onclick="makeTokens()">Generate Tokens</button><br/>
-  <textarea rows="10"></textarea>
-  <p>Enter 1) a class id, 2) a project id, and 3) number of tokens to generate.  Then click "Generate Tokens".</p>
-</div>
+  response += `
+    <script>
+      async function MakeTokens() {
+        console.log('make tokens');
+        const classid = document.getElementById('classid').value;
+        const projid = document.getElementById('projid').value;
+        const count = document.getElementById('count').value;
+        const dataset = document.getElementById('datasets').value;
+        let data = await fetch('./maketoken/'+classid+'/'+projid+'/'+dataset+'/'+count);
+        let result = await data.text();
+        const tokenDisplay = document.getElementById('tokenDisplay');
+        tokenDisplay.value = result;        
+      }
+    </script>
+    <h3>Generate Tokens</h3>
+    <div>
+      <p>Select a database, enter a class id, a project id, and number of tokens to generate.  Then click "Generate Tokens".</p>
+      <select id="datasets">
+        ${dbnames}
+      </select>
+      <input id="classid" placeholder="Class ID e.g. 'PER1'"> 
+      <input id="projid" placeholder="Project ID e.g. 'ROME'"> 
+      <input id="count" placeholder="Num of tokens e.g. '10'">
+      <button onclick="MakeTokens()">Generate Tokens</button><br/><br/>
+      <textarea id="tokenDisplay" rows="10" cols="80" placeholder="Tokens will appear here..." readonly></textarea>
+    </div>
   `;
-                                    
+  response += `</div>`;                                    
   return response;
 }
 
@@ -604,6 +664,15 @@ app.get('/kill/:graph/', (req, res) => {
 });
 
 
+
+// HANDLE "/maketoken" -- GENERATE TOKENS
+app.get('/maketoken/:clsid/:projid/:dataset/:numgroups', (req, res) => {
+  console.log(PRE + "================== Handling / MAKE TOKEN!");
+  const { clsid, projid, dataset, numgroups } = req.params;
+  let response = MakeToken(clsid, projid, dataset, parseInt(numgroups));
+  res.set("Content-Type", "text/html");
+  res.send(response);
+});
   
   
   

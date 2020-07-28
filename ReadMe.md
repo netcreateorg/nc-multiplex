@@ -117,6 +117,19 @@ Refresh the manager to view the current list of running databases.
 The manager lists all the graphs it finds on in the `~/your-dev-folder/nc-multiplex/netcreate-2018/build/runtime/` folder.  You can click on the link to start the graph.
 
 
+#### 10. Generate Tokens
+
+Any user who wants to edit a graph will need to generate a token.  Tokens now only work for specific graphs, so for instance a token for "hawaii" will not allow you to open "tacitus".  To generate tokens, in the "Generate Tokens" box:
+
+1. Select the graph you want to generate tokens for.
+2. Enter a Class ID.  It can be any string.  e.g. you can use this to designate an organization.
+3. Enter a Project ID.  It can be any string.  e.g. you can use this to designate a group.
+4. Select the number of tokens to generate.
+5. Click "Generate Tokens".
+6. Copy the resulting codes.
+
+You can regenerate the same codes any time.
+
 
 ## Managing Databases
 
