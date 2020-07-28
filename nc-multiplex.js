@@ -284,7 +284,7 @@ function RenderDatabaseList() {
 }
 
 function RenderActiveGraphsList() {
-  let response = `<div>`;
+  let response = `<div class="box">`;
   response += `<h3>Active Graphs</h3>
     <table>
       <thead>
@@ -311,7 +311,7 @@ function RenderActiveGraphsList() {
 }
 
 function RenderSavedGraphsList() {
-  let response = `<div>`;
+  let response = `<div class="box">`;
   response += `<h3>Saved Graphs</h3>`;
   response += `<p>Graph/database files saved on server.  Click to open.</p>`;
   response += RenderDatabaseList();
@@ -321,14 +321,14 @@ function RenderSavedGraphsList() {
 
 function RenderNewGraphForm() {
   return `
-    <div>
+    <div class="box">
       <h3>New Graph</h3>
       <input placeholder="Enter new graph name"> <button>Create New Database</button>  
     </div>`;
 }
 
 function RenderGenerateTokensForm() {
-  let response = `<div>`;
+  let response = `<div class="box">`;
   let dbnames = childProcesses.reduce(
     (acc, curr) =>
       acc + "<option value='" + curr.db + "'>" + curr.db + "</option>",
@@ -589,47 +589,32 @@ app.use(
 // -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -
 // ERROR HANDLERS
 
-// HANDLE NO DATABASE -- RETURN ERROR
-app.get('/error_no_database', (req, res) => {
-  console.log(PRE + '================== Handling ERROR NO DATABASE!')
+function SendErrorResponse(res, msg) {
   res.set("Content-Type", "text/html");
   res.send(
-    `<p>Database does not exist.</p>
+    `<p>${msg}</p>
     <p><a href="/">Back to Multiplex</a></p>`
-  );
+  );  
+}
 });
 
 
 // HANDLE OUT OF PORTS -- RETURN ERROR
 app.get('/error_out_of_ports', (req, res) => {
   console.log(PRE + '================== Handling ERROR OUT OF PORTS!')
-  res.set("Content-Type", "text/html");
-  res.send(
-    `<p>Ran out of ports.  Can't start the graph.</p>
-    <p><a href="/">Back to Multiplex</a></p>`
-  );
+  SendErrorResponse(res, "Ran out of ports.  Can't start the graph.");
 });
-
 
 // HANDLE OUT OF MEMORY -- RETURN ERROR
 app.get('/error_out_of_memory', (req, res) => {
   console.log(PRE + '================== Handling ERROR OUT OF MEMORY!')
-  res.set("Content-Type", "text/html");
-  res.send(
-    `<p>Ran out of Memory.  Can't start the graph.</p>
-    <p><a href="/">Back to Multiplex</a></p>`
-  );
+  SendErrorResponse(res, "Ran out of Memory.  Can't start the graph.");
 });
-
 
 // HANDLE MISSING TRAILING ".../" -- RETURN ERROR
 app.get('/graph/:file', (req, res) => {
   console.log(PRE + '================== Handling BAD URL!')
-  res.set("Content-Type", "text/html");
-  res.send(
-    `Bad URL. Missing trailing "/".
-    Perhaps you meant <a href="${req.originalUrl}/">${req.originalUrl}/</a>`
-  );
+  SendErrorResponse(res, "Bad URL. Missing trailing '/'.");
 });
 
 
@@ -714,7 +699,7 @@ app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'home.html'));
   } else {
     res.set("Content-Type", "text/html");
-    let response = `<h1><img src="/images/netcreate-logo.svg" alt="NetCreate Logo" width="100px"> Multiplex</h1>`;
+    let response = logoHtml;
     response += `<p>Please contact Professor Kalani Craig, Institute for Digital Arts & Humanities at (812) 856-5721 (BH) or craigkl@indiana.edu with questions or concerns and/or to request information contained on this website in an accessible format.</p>`;
     res.send(response);
   }
