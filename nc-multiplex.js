@@ -379,8 +379,33 @@ function RenderNewGraphForm() {
   return `
     <div class="box">
       <h3>New Graph</h3>
-      <input placeholder="Enter new graph name"> <button>Create New Database</button>  
-    </div>`;
+      <script>
+        function OpenGraph() {
+          const regex = /^[a-zA-Z0-9]+$/;
+          const db = document.getElementById('dbname').value;
+          if (regex.test(db) === false) {
+            alert('Please use only alphanumeric characters.  No spaces and no punctuation.');
+          } else if (db.length < 1) {
+            alert('No database name entered.');
+          } else {
+            window.open('graph/'+db+'/', '_blank');            
+          }
+        }
+      </script>
+      <style>
+        input:invalid {
+          border: 2px solid red;
+        }
+      </style>
+      <p>Add a template file with the same name to the /runtime folder.  Otherwise, the system 
+      make a copy of the default template.</p>
+      <label>Enter a short alphanumeric name for the database.  No spaces, no punctuation.
+        <form>
+          <input id="dbname" placeholder="Enter new graph name" required pattern="^[a-zA-Z0-9]+$"> 
+          <button onclick="OpenGraph()">Create New Database</button>
+        </form>
+      </label>
+   </div>`;
 }
 
 function RenderGenerateTokensForm() {

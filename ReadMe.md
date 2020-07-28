@@ -109,8 +109,15 @@ http://localhost
 
 #### 8. Starting New Graphs
 
-To start a new graph:
-  `http://localhost/graph/tacitus/`
+You can start a new graph one of two ways.
+
+Form
+1. On the "New Graph" box, type in a new database name.
+2. Click "Create New Graph".  The new database will open in new window.
+
+Direct Shortcut
+1. Make sure you're logged in as an administrator.
+2. Enter a new url with `/graph/<dbname>/`, e.g. `http://localhost/graph/tacitus/`
 
 If the graph already exists, it will be loaded. 
 Otherwise the router will create and load a new graph.
