@@ -360,6 +360,7 @@ function RenderActiveGraphsList() {
   });
   response += `</tbody></table>`;
   response += `<p>Number of Active Graphs: ${childProcesses.length - 1} / ${PROCESS_MAX} (max)`;
+  response += `<p>Reload browser to refresh Active Graphs.</p>`;
   response += `<p>"Stop" active graphs if you're not using them anymore.<br/>(Closing the window does not stop the graph.)</p>`;
   response += `</div>`;
   return response;  
@@ -581,6 +582,12 @@ async function RouterGraph (req) {
   const db = req.params.graph;
   let port;
   
+  // Authenticate to allow spawning
+  let ALLOW_SPAWN = false;
+  if (CookieIsValid(req)) {
+    ALLOW_SPAWN = true;
+  }
+  
   // Is it already running?
   let route = childProcesses.find(route => route.db === db);
   if (route) {
@@ -594,7 +601,7 @@ async function RouterGraph (req) {
   } else if (OutOfMemory()) {
     // c) Not enough memory to spawn new node instance
     return `http://localhost:${PORT_ROUTER}/error_out_of_memory`;
-  } else if (ALLOW_NEW) {
+  } else if (ALLOW_NEW || ALLOW_SPAWN) {
     // c) Not defined yet, Create a new one.
     console.log(PRE + "--> not running yet, starting new", db);
     port = await SpawnApp(db);
@@ -615,7 +622,9 @@ async function RouterGraph (req) {
 
 // HANDLE `/graph/:graph/:file?
 //
-// If there's a missing trailing "/", the URL is malformed 
+// * `:file` is optional.  It catches db-specific file requests, 
+//   for example, the`netcreate-config.js` request.
+// * If there's a missing trailing "/", the URL is malformed 
 //
 app.use(
   '/graph/:graph/:file?',
@@ -655,7 +664,7 @@ function SendErrorResponse(res, msg) {
 // HANDLE NO DATABASE -- RETURN ERROR
 app.get('/error_no_database', (req, res) => {
   console.log(PRE + '================== Handling ERROR NO DATABASE!')
-  SendErrorResponse(res, 'Database does not exist.')
+  SendErrorResponse(res, 'This graph is not currently open.')
 });
 
 // HANDLE NOT AUTHORIZED -- RETURN ERROR

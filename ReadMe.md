@@ -125,7 +125,14 @@ Refresh the manager to view the current list of running databases.
 
 #### 9. Load Exisitng Graph
 
-The manager lists all the graphs it finds on in the `~/your-dev-folder/nc-multiplex/netcreate-2018/build/runtime/` folder.  You can click on the link to start the graph.
+The manager lists all the graphs it finds in the `~/your-dev-folder/nc-multiplex/netcreate-2018/build/runtime/` folder.  To load an existing graph:
+
+1. Make sure you're logged in and your cookie hasn't expired.
+2. Click on the graph link in the "Saved Graphs" box to start the graph.
+
+If you're not logged in, you will get an error.
+
+Shortcut: If you have an active valid cookie, you can just go directly to the URL.
 
 
 #### 10. Generate Tokens
