@@ -74,7 +74,18 @@ If you would like a custom home page, add a file called `home.html` to the root 
 If no `home.html` page is found, the app will display a NetCreate logo and contact information at `http://localhost/`.
 
 
-#### 5. Start Reverse Proxy Server
+#### 5. Set your Password
+By default, the password is `kpop`.  We **strongly recommend** you set a custom password.  
+
+To set a new password, create a text file named `SESAME` containing just your password text (no line feed), and place it in the root `/nc-multiplex` folder.
+
+Or you can:
+1. `ssh` to your machine
+2. `cd your-dev-folder/nc-multiplex`
+3. `printf "yourpassword" > SESAME`
+
+
+#### 6. Start Reverse Proxy Server
 ```
 cd ~/your-dev-folder/nc-multiplex
 node nc-multiplex.js
@@ -91,12 +102,12 @@ analytics code. e.g.:
 See "Caveats" below for more information.
 
 
-#### 6. View the manager
+#### 7. View the manager
 ```
 http://localhost
 ```
 
-#### 7. Starting New Graphs
+#### 8. Starting New Graphs
 
 To start a new graph:
   `http://localhost/graph/tacitus/`
@@ -112,7 +123,7 @@ Refresh the manager to view the current list of running databases.
 **IMPORTANT**: The trailing "/" is necessary in the URL.  The system will warn you if you try to start a database without it, e.g. `http://localhost/graph/tacitus`.  This is necessary because we would otherwise be unable to distinguish between new graph requests and static file requests.
 
 
-#### 8. Load Exisitng Graph
+#### 9. Load Exisitng Graph
 
 The manager lists all the graphs it finds on in the `~/your-dev-folder/nc-multiplex/netcreate-2018/build/runtime/` folder.  You can click on the link to start the graph.
 
@@ -185,6 +196,14 @@ Anyone can create as many new databases as they want, using any name they choose
 * `home.html`
 
 To keep things simple and slightly more secure, you can't include any files with the home page, e.g. no images, css, or js.  The one exception is you can use NetCreate's logo: `<img src="/images/netcreate-logo.svg">` 
+
+The server only checks for the existence of the home page on startup, so if you change the home page, you'll need to restart the server to activate it.
+
+* Password
+
+The server only checks for the existence of the password override on startup, so if you change the password, you'll need to restart the server to activate it.
+
+After you successfully login, the system will set a cookie that allows you to access the manage page for a few minutes (30 by default).  You can customize the number of minutes your authorization cookie is valid for with the `AUTH_MINUTES` variable.
 
 
 

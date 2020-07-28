@@ -78,7 +78,11 @@ const { fork } = require("child_process");
 const fs = require("fs");
 const path = require("path");
 const express = require("express");
+const cookieParser = require("cookie-parser");
+const crypto = require("crypto");
 const app = express();
+app.use(express.urlencoded({ extended: true }));
+app.use(cookieParser());
 
 const DBUTILS = require("./modules/db-utils.js");
 
@@ -92,6 +96,8 @@ const PRE = '...nc-multiplex: ';
 
 // SETTINGS
 let HOMEPAGE_EXISTS; // Flag for existence of home.html override
+let PASSWORD; // Either default password or password in `SESAME` file
+let PASSWORD_HASH; // Hash generated from password
 
 // OPTIONS
 const PROCESS_MAX = 100; // Set this to limit the number of running processes
@@ -110,6 +116,13 @@ const ALLOW_NEW = false; // default = false
                          // url.  e.g. going to `http://localhost/graph/newdb/` 
                          // would automatically create a new database if it
                          // didn't already exist
+
+const DEFAULT_PASSWORD = 'kpop'; // override with SESAME file
+
+// FIXME: Set to 1 min for testing
+const AUTH_MINUTES = 1; // default = 30
+                         // Number of minutes to authorize login cookie
+                         // After AUTH_MINUTES, the user wil have to re-login.
 
 
 // ----------------------------------------------------------------------------
@@ -142,6 +155,22 @@ try {
 }
 
 
+
+// ----------------------------------------------------------------------------
+// SET PASSWORD
+//
+// If there's a 'SESAME' file, use the password in there.
+// Otherwise, fallback to default.
+//
+try {
+  let sesame = fs.readFileSync("SESAME", "utf8");
+  PASSWORD = sesame;
+} catch (err) {
+  // no password, use default
+  PASSWORD = DEFAULT_PASSWORD;
+}
+// Make Hash
+PASSWORD_HASH = GetHash(PASSWORD);
 
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -200,6 +229,24 @@ function MakeToken(clsId, projId, dataset, numGroups) {
   return out;
 }
 
+/**
+ * Used to generate a hashed password for use in the cookie
+ * so that password text is not visible in the cookie.
+ * @param {string} pw 
+ */
+function GetHash(pw) {
+  let hash = crypto.createHash('sha1').update(pw).digest('hex');
+  return hash;
+}
+
+/**
+ * HASH is generated from the PASSWORD
+ * @param {string} pw 
+ */
+function CookieIsValid(pw) {
+  // check against hash
+  return pw === PASSWORD_HASH;
+}
 
 
 ///// PORT POOL ---------------------------------------------------------------
@@ -603,8 +650,18 @@ function SendErrorResponse(res, msg) {
     <p><a href="/">Back to Multiplex</a></p>`
   );  
 }
+
+// HANDLE NO DATABASE -- RETURN ERROR
+app.get('/error_no_database', (req, res) => {
+  console.log(PRE + '================== Handling ERROR NO DATABASE!')
+  SendErrorResponse(res, 'Database does not exist.')
 });
 
+// HANDLE NOT AUTHORIZED -- RETURN ERROR
+app.get('/error_not_authorized', (req, res) => {
+  console.log(PRE + "================== Handling ERROR NOT AUTHORIZED!");
+  SendErrorResponse(res, "Not Authorized.");
+});
 
 // HANDLE OUT OF PORTS -- RETURN ERROR
 app.get('/error_out_of_ports', (req, res) => {
@@ -670,27 +727,67 @@ app.get('/maketoken/:clsid/:projid/:dataset/:numgroups', (req, res) => {
   
 // -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -
 // MANAGE
-
+//
+// Authentication
+//
+// Authentication uses a cookie with a hashed password.
+// The cookie expires after AUTH_MINUTES
+//
+// 1. /manage initially redirects to /login
+// 2. On the /login form, the administrator enters a password
+// 3. /login POSTS to /authorize
+// 4. /authorize checks the password against the PASSWORD
+//    If there's no match, the user is redirected to /error_not_authorized
+// 5. /authorize then sets a cookie with the PASSWORD_HASH and
+//    the user is redirected to /manage
+// 6. /manage checks the cookie against the PASSWORD_HASH
+//    If the cookie matches, the manage page is displayed
+//    If the cookie doesn't match, the user is redirected back to /login
+// 7. The cookie expires after AUTH_MINUTES
+//
 
 // HANDLE "/manage" -- MANAGER PAGE
+// also handle post
 app.get('/manage', (req, res) => {
   console.log(PRE + "================== Handling / MANAGE!");
+  if (CookieIsValid(req.cookies["nc-multiplex-auth"]) ) {
+    res.set("Content-Type", "text/html");
+    res.send( RenderManager() );
+  } else {
+    res.redirect(`http://localhost:${PORT_ROUTER}/login`);
+  }
+});
 
-  res.set("Content-Type", "text/html");
-  let response = `<h1><img src="/images/netcreate-logo.svg" alt="NetCreate Logo" width="100px"> Multiplex</h1>`;
+app.get('/login', (req, res) => {
+  console.log(PRE + "================== Handling / LOGIN!");
+  if (CookieIsValid(req.cookies["nc-multiplex-auth"])) {
+    // Cookie already set, no need to log in, redirect to manage
+    res.redirect(`http://localhost:${PORT_ROUTER}/manage`);
+  } else {
+    // Show login form
+    res.set("Content-Type", "text/html");
+    res.send(`
+      ${logoHtml}
+      <form action="/authorize" method="post">
+        <label>Password: <input name="password" type="password" /></label>
+        <input type="submit" />
+      </form>
+    `);
+  }
+});
+
+app.post('/authorize', (req, res) => {
+  console.log(PRE + "================== Handling / AUTHORIZE!");
   
-  response += `<div style="display: flex">`
-  response += RenderActiveGraphsList();
-  response += RenderSavedGraphsList();
-  response += `</div><hr>`;
-  response += `<div style="display: flex">`;
-  response += RenderNewGraphForm() + `<hr>`; 
-  response += RenderGenerateTokensForm();
-  response += `</div><hr>`;
-  response += RenderMemoryReport();
-  response += `<p>Updated: ${new Date().toLocaleTimeString()}</p >`;
-
-  res.send(response);
+  let str = new String(req.body.password);
+  if ( req.body.password === PASSWORD ) {
+    res.cookie("nc-multiplex-auth", PASSWORD_HASH, {
+      maxAge: AUTH_MINUTES * 60 * 1000,
+    }); // ms
+    res.redirect(`http://localhost:${PORT_ROUTER}/manage`);
+  } else {
+    res.redirect(`http://localhost:${PORT_ROUTER}/error_not_authorized`);
+  }
 });
 
 
