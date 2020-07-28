@@ -105,7 +105,7 @@ See "Caveats" below for more information.
 
 #### 7. View the manager
 ```
-http://localhost
+http://localhost/manage
 ```
 
 #### 8. Starting New Graphs
