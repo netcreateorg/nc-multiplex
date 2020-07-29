@@ -166,9 +166,8 @@ const ip = argv["ip"];
 // If there's a 'home.html' file, serve that at '/'.
 // 
 try {
-  fs.accessSync("home.html", fs.constants.R_OK, (err) => {
-    if (!err) HOMEPAGE_EXISTS = true;
-  });
+  fs.accessSync("home.html", fs.constants.R_OK);
+  HOMEPAGE_EXISTS = true;
 } catch (err) {
   // no home page, use default
   HOMEPAGE_EXISTS = false;
