@@ -490,7 +490,7 @@ function RenderMemoryReport() {
   let response = `<p>MEMORY :: Used: 
     ${numberWithCommas(Math.trunc(mem.heapUsed / 1024))}mb / 
     ${numberWithCommas(mem.heapTotal / 1024)}mb 
-    (${(mem.heapUsed / mem.heapTotal).toFixed(2)}%) `;
+    (${(100*(mem.heapUsed / mem.heapTotal)).toFixed(2)}%) `;
   response += ` :: Remaining: ${numberWithCommas( Math.trunc((mem.heapTotal-mem.heapUsed)/1024) )}mb`;
   response += ` :: Out of memory: ${OutOfMemory()}</p>`;
   return response;  
