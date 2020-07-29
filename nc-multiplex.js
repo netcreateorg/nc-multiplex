@@ -450,12 +450,7 @@ function RenderNewGraphForm() {
 
 function RenderGenerateTokensForm() {
   let response = `<div class="box">`;
-  let dbnames = childProcesses.reduce(
-    (acc, curr) =>
-      acc + "<option value='" + curr.db + "'>" + curr.db + "</option>",
-    ""
-  );
-  dbnames += NCUTILS.GetDatabaseNamesArray().reduce(
+  let dbnames = NCUTILS.GetDatabaseNamesArray().reduce(
     (acc, curr) => acc + "<option value='" + curr + "'>" + curr + "</option>",
     ""
   );
