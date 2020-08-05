@@ -393,8 +393,8 @@ function RenderActiveGraphsList() {
       <tbody>  
   `;
   childProcesses.forEach((route, index) => {
+    if (index < 1) return; // Don't list the BASE database
     let kill = `<a href="/kill/${route.db}/">stop</a>`;
-    if (index < 1) kill = ""; // Don't allow BASE to be killed.
     response += `
       <tr>
         <td><a href="/graph/${route.db}/" target="${route.db}">${route.db}</a></td>
