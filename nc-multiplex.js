@@ -21,6 +21,8 @@
     
       If the graph already exists, it will be loaded.
       Otherwise it will create a new graph.
+      (You need to be logged into the manager for this
+      to work.)
     
       Refresh the manager to view running databases.
   
@@ -106,18 +108,20 @@ app.use(cookieParser());
 
 const NCUTILS = require("./modules/nc-utils.js");
 
+const PRE = "...nc-multiplex: "; // console.log prefix
+
+
+// SETTINGS
 const PORT_ROUTER = 80;
 const PORT_APP = 3000; // base port for nc apps
 const PORT_WS = 4000; // base port for websockets
+const DEFAULT_PASSWORD = 'kpop'; // override with SESAME file
 
-let childProcesses = []; // array of forked process + meta info = { db, port, netport, portindex, process };
-
-const PRE = '...nc-multiplex: ';
-
-// SETTINGS
 let HOMEPAGE_EXISTS; // Flag for existence of home.html override
 let PASSWORD; // Either default password or password in `SESAME` file
 let PASSWORD_HASH; // Hash generated from password
+let childProcesses = []; // array of forked process + meta info = { db, port, netport, portindex, process };
+
 
 // OPTIONS
 const PROCESS_MAX = 30;  // Set this to limit the number of running processes
@@ -128,19 +132,19 @@ const PROCESS_MAX = 30;  // Set this to limit the number of running processes
 const MEMORY_MIN = 256;  // in MegaBytes
                          // Don't start a new process if there is less than
                          // MEMORY_MIN memory remaining.  
+                         // In our testing with macOS and Ubuntu 18.04 on EC2:
                          // * Each node process is generally ~30 MB.
-                         // * Servers would hant with less than 100 MB remaining.
+                         // * Servers stop responding with less than 100 MB remaining.
 
 const ALLOW_NEW = false; // default = false
-                         // set to true to allow auto-spawning a new database via
-                         // url.  e.g. going to `http://localhost/graph/newdb/` 
-                         // would automatically create a new database if it
-                         // didn't already exist
+                         // false: App will respond with ERROR NO DATABASE if you enter
+                         //        a url that points to a non-existent database.
+                         // true:  Set to true to allow auto-spawning a new database via
+                         //        url.  e.g. going to `http://localhost/graph/newdb/` 
+                         //        would automatically create a new database if it
+                         //        didn't already exist.
 
-const DEFAULT_PASSWORD = 'kpop'; // override with SESAME file
-
-// FIXME: Set to 1 min for testing
-const AUTH_MINUTES = 1; // default = 30
+const AUTH_MINUTES = 2;  // default = 30
                          // Number of minutes to authorize login cookie
                          // After AUTH_MINUTES, the user wil have to re-login.
 
