@@ -27,6 +27,7 @@ cd ~/your-dev-folder/nc-multiplex
 npm ci
 ```
 
+
 #### 2. Install NetCreate
 Install NetCreate INSIDE the `nc-multiplex` folder.  e.g. your directory structure should look something like this:
 ```
@@ -53,6 +54,7 @@ cd netcreate-2018/build
 npm ci
 ```
 
+
 #### 3. Compile NetCreate for Classroom
 ```
 npm run classroom
@@ -65,7 +67,17 @@ Alternatively you can use `npm run package` to do it without running the app.
 
 The NetCreate instances spun up by `nc-multiplex` will use the shared compiled code for each NetCreate instance.
 
-IMPORTANT: Every time you pull a new version of netcreate-2018, you need to recompile, otherwise, nc-multiplex will use the old compiled code.
+**IMPORTANT**: Every time you pull a new version of netcreate-2018, you need to recompile, otherwise, nc-multiplex will use the old compiled code.
+
+**IMPORTANT**: Do NOT build it with `npm run dev` or NetCreate will try to enable autoreload (used for detecting changes in code and restarting the server during development).  This will result in a slow startup as well as repeated connection failures to port 9485 for autoreload.  If you see messages like this in your console, you probably built NetCrate using `npm run dev`: 
+
+```
+WebSocket connection to 'ws://*:9485/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED
+```
+or
+```
+Firefox can’t establish a connection to the server at ws://*:9485/. auto-reload.js:69:21
+```
 
 
 #### 4. Set your Home Page
