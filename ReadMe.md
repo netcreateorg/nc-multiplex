@@ -14,9 +14,9 @@ These instructions are primarily for installing on a local development machine. 
 
 #### Requirements
 * git
-* node 10+
+* Node 10+
 
-We assume you already have git and node 10+ installed.
+We assume you already have git and node 10+ installed.  We also assume you have `nvm` installed.  Running `nvm use` will set automatically set the right node version.  If you don't have `nvm` installed, just make sure you install NodeJS version 10.22.0 or later.
 
 
 #### 1. Clone `nc-multiplex`
@@ -24,6 +24,7 @@ We assume you already have git and node 10+ installed.
 cd ~/your-dev-folder/
 git clone https://gitlab.com/netcreate/nc-multiplex.git
 cd ~/your-dev-folder/nc-multiplex
+nvm use
 npm ci
 ```
 
@@ -40,11 +41,11 @@ cd ~/your-dev-folder/nc-multiplex
 git clone https://github.com/netcreateorg/netcreate-2018.git
 ```
 
-As of 7/23/2020, the ability to configure IP addresses is still on the `dev-bl/config-ip` branch.  So check out that branch.  `nc-multiplex` will fail if you try to use the `master` or `dev` branch.
+As of 7/23/2020, the ability to configure IP addresses is still on the `dev-bl/config-ip-filter` branch.  So check out that branch.  `nc-multiplex` will fail if you try to use the `master` or `dev` branch.
 
 ```
 cd netcreate-2018
-git checkout dev-bl/config-ip
+git checkout dev-bl/config-ip-filter
 ```
 
 ...continue with install...
@@ -143,7 +144,7 @@ Refresh the manager to view the current list of running databases.
 **IMPORTANT**: The trailing "/" is necessary in the URL.  The system will warn you if you try to start a database without it, e.g. `http://localhost/graph/tacitus`.  This is necessary because we would otherwise be unable to distinguish between new graph requests and static file requests.
 
 
-#### 9. Load Exisitng Graph
+#### 9. Load Existing Graph
 
 The manager lists all the graphs it finds in the `~/your-dev-folder/nc-multiplex/netcreate-2018/build/runtime/` folder.  To load an existing graph:
 
@@ -186,6 +187,8 @@ All databases are stored in the NetCreate runtime folder, e.g. `~/your-dev-folde
 * Note you no longer need to use the `?` method to retrieve a specific database.  (It applies only to standalone mode anyway).  e.g. just use `localhost/graph/tacitus/` instead of `localhost/?dataset=2020-02-06_Tacitus#/`
 
 * The database named "base" is always started on port 3000 to handle static file requests.  You shouldn't need to touch this graph.
+
+* The default database template used when creating a new project is in `~/your-dev-folder/nc-multiplex/netcreate-2018/build/app/assets/templates/_default.template`.  You can modify this.
 
 
 ## How it works
@@ -294,7 +297,7 @@ Generally, you won't need to use the `--ip` option.
 
 To keep node running, you'll need a process manager.
 
-On Ubuntu, you can use pm or pm2.
+On Ubuntu, you can use `pm` or `pm2`.  With `pm2` you can pass the `ip` parameter like this (note the extra set of dashes): `sudo pm2 start nc-multiplex.js -- --ip=196.168.1.30`
 
 
 * Memory Limits
@@ -316,7 +319,7 @@ There is absolutely no security on this system.  So use it with caution.  It's p
 
 * Wide open databases
 
-Anyone can view any database running on the server.
+Anyone can view any database running on the server, unless you have set the `requireLogin` flag on the database template files.  See the (User Guide)[https://github.com/netcreateorg/netcreate-2018/wiki/User-Guide].
 
 
 * No limits on creating
@@ -325,7 +328,7 @@ Anyone with admin access can create as many new databases as they want, using an
 
 * `home.html`
 
-To keep things simple and slightly more secure, you can't include any files with the home page, e.g. no images, css, or js.  The one exception is you can use NetCreate's logo: `<img src="/images/netcreate-logo.svg">` 
+To keep things simple and slightly more secure, you can't include any files with the home page, e.g. no images, css, or js.  The one exception is you can use NetCreate's logo: `<img src="/images/netcreate-logo.svg">`.  (The Express server is not set up to serve any other files.)
 
 The server only checks for the existence of the home page on startup, so if you change the home page, you'll need to restart the server to activate it.
 
