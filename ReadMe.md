@@ -64,7 +64,7 @@ We need pre-compile the NetCreate code for the classroom.  This compiles the scr
 
 `ctrl-c` to quit the running app.
 
-Alternatively you can use `npm run package` to do it without running the app.
+Alternatively you can use `npm run package` if you want the network to run in STANDALONE mode (no edits).
 
 The NetCreate instances spun up by `nc-multiplex` will use the shared compiled code for each NetCreate instance.
 
