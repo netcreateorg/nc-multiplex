@@ -867,6 +867,20 @@ app.get('/login', (req, res) => {
   }
 });
 
+app.get('/template', (req, res) => {
+  console.log(PRE + "================== Handling / TEMPLATE");
+
+  try {
+    res.sendFile(path.join(__dirname, '/templatemaker/NC_Template_Builder.html'));
+    console.log("opened");
+  } catch (err) {
+    // no home page, use default
+    console.log("Error loading template");
+  }
+
+});
+
+
 app.post('/authorize', (req, res) => {
   console.log(PRE + "================== Handling / AUTHORIZE!");
   let str = new String(req.body.password);
