@@ -41,13 +41,6 @@ cd ~/your-dev-folder/nc-multiplex
 git clone https://github.com/netcreateorg/netcreate-2018.git
 ```
 
-As of 7/23/2020, the ability to configure IP addresses is still on the `dev-bl/config-ip-filter` branch.  So check out that branch.  `nc-multiplex` will fail if you try to use the `master` or `dev` branch.
-
-```
-cd netcreate-2018
-git checkout dev-bl/config-ip-filter
-```
-
 ...continue with install...
 
 ```
@@ -55,6 +48,21 @@ cd netcreate-2018/build
 npm ci
 ```
 
+If this is your first run with a newly cloned repo, run Net.Create once to set configuration files.
+```
+// cd netcreate-2018/build
+./nc.js --dataset=demo
+```
+
+Check your browser to make sure it's running:
+```
+http://localhost:3000
+```
+
+Then stop the Net.Create application.
+```
+ctrl-c
+```
 
 #### 3. Compile NetCreate for Classroom
 ```
