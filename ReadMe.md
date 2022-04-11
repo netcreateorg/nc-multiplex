@@ -1,13 +1,15 @@
 # nc-multiplex
 
-nc-multiplex implements multiple-database hosting for NetCreate.
+nc-multiplex implements multiple-database hosting for Net.Create.
 
-It is a node-based reverse proxy / process manager that can spin up individual NetCreate graph instances running their own separate node processes on a single hosted server.
+Normally, you can only run a single Net.Create graph instance per server.  In order to host multiple graphs on a single server, you would use nc-multiplex.
+
+It is a node-based reverse proxy / process manager that can spin up individual Net.Create graph instances running their own separate node processes on a single hosted server.
 
 
 ## Installation
 
-This repo contains only the reverse proxy server.  You will need to install the NetCreate repo separately.
+This repo contains only the reverse proxy server.  You will need to install the Net.Create repo separately.
 
 These instructions are primarily for installing on a local development machine.  See also "Installing in the Cloud" notes at the end.
 
@@ -22,15 +24,15 @@ We assume you already have git and node 10+ installed.  We also assume you have 
 #### 1. Clone `nc-multiplex`
 ```
 cd ~/your-dev-folder/
-git clone https://gitlab.com/netcreate/nc-multiplex.git
+git clone https://github.com/netcreateorg/nc-multiplex
 cd ~/your-dev-folder/nc-multiplex
 nvm use
 npm ci
 ```
 
 
-#### 2. Install NetCreate
-Install NetCreate INSIDE the `nc-multiplex` folder.  e.g. your directory structure should look something like this:
+#### 2. Install Net.Create
+Install Net.Create INSIDE the `nc-multiplex` folder.  e.g. your directory structure should look something like this:
 ```
 ~/your-dev-folder/nc-multiplex/
 ~/your-dev-folder/nc-multiplex/netcreate-2018/
@@ -56,21 +58,21 @@ npm ci
 ```
 
 
-#### 3. Compile NetCreate for Classroom
+#### 3. Compile Net.Create for Classroom
 ```
 npm run classroom
 ```
-We need pre-compile the NetCreate code for the classroom.  This compiles the script to run without autoreload, and lets you test to make sure it can run.
+We need pre-compile the Net.Create code for the classroom.  This compiles the script to run without autoreload, and lets you test to make sure it can run.
 
 `ctrl-c` to quit the running app.
 
 Alternatively you can use `npm run package` if you want the network to run in STANDALONE mode (no edits).
 
-The NetCreate instances spun up by `nc-multiplex` will use the shared compiled code for each NetCreate instance.
+The Net.Create instances spun up by `nc-multiplex` will use the shared compiled code for each Net.Create instance.
 
 **IMPORTANT**: Every time you pull a new version of netcreate-2018, you need to recompile, otherwise, nc-multiplex will use the old compiled code.
 
-**IMPORTANT**: Do NOT build it with `npm run dev` or NetCreate will try to enable autoreload (used for detecting changes in code and restarting the server during development).  This will result in a slow startup as well as repeated connection failures to port 9485 for autoreload.  If you see messages like this in your console, you probably built NetCrate using `npm run dev`: 
+**IMPORTANT**: Do NOT build it with `npm run dev` or Net.Create will try to enable autoreload (used for detecting changes in code and restarting the server during development).  This will result in a slow startup as well as repeated connection failures to port 9485 for autoreload.  If you see messages like this in your console, you probably built NetCrate using `npm run dev`: 
 
 ```
 WebSocket connection to 'ws://*:9485/' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED
@@ -84,7 +86,7 @@ Firefox can’t establish a connection to the server at ws://*:9485/. auto-reloa
 #### 4. Set your Home Page
 If you would like a custom home page, add a file called `home.html` to the root folder at `nc-multiplex/home.html`.
 
-If no `home.html` page is found, the app will display a NetCreate logo and contact information at `http://localhost/`.
+If no `home.html` page is found, the app will display a Net.Create logo and contact information at `http://localhost/`.
 
 
 #### 5. Set your Password
@@ -172,7 +174,7 @@ You can regenerate the same codes any time.
 
 ## Managing Databases
 
-All databases are stored in the NetCreate runtime folder, e.g. `~/your-dev-folder/nc-multiplex/netcreate-2018/build/runtime/`.  All node processes share the same database files.  So any database you spin up will be in the main runtime folder.
+All databases are stored in the Net.Create runtime folder, e.g. `~/your-dev-folder/nc-multiplex/netcreate-2018/build/runtime/`.  All node processes share the same database files.  So any database you spin up will be in the main runtime folder.
 
 * Prepopulate the databases and templates by simply copying the `*.loki` and `*.template` files there prior to running `node nc-multiplex.js`.
 
@@ -195,7 +197,7 @@ All databases are stored in the NetCreate runtime folder, e.g. `~/your-dev-folde
 
 nc-multiplex is essentially a traffic cop and process manager.
 
-Its principle role is traffic cop.  When a request comes in, e.g. `http://localhost/graph/tacitus/`, nc-multiplex checks to see if there is already a running NetCreate instance.  If there isn't, it starts a new NetCreate instance, and then routes the traffic to `http://localhost:nnnn` where `nnnn` is the port number the newly created NetCreate instance is running on. The user never sees the port number.  (You can go directly to `http://localhost:nnnn` to work with the app if you want.)
+Its principal role is traffic cop.  When a request comes in, e.g. `http://localhost/graph/tacitus/`, nc-multiplex checks to see if there is already a running Net.Create instance.  If there isn't, it starts a new Net.Create instance, and then routes the traffic to `http://localhost:nnnn` where `nnnn` is the port number the newly created Net.Create instance is running on. The user never sees the port number.  (You can go directly to `http://localhost:nnnn` to work with the app if you want.)
 
 When subsequent requests come in, any calls to `/graph/tacitus/` are also routed to the same port.  Any calls to other graphs, e.g. `/graph/hawaii/` are then spun up separately.
 
@@ -278,7 +280,7 @@ If you set `PROCESS_MAX` (in `nc-multiplex.js`) higher than 100, you'll want to 
 
 All outbound ports should be open.
 
-In addition, if you plan on running NetCreate in `dev` mode (e.g. using the `.nc.js` script directly), you'll probably also want to open:
+In addition, if you plan on running Net.Create in `dev` mode (e.g. using the `.nc.js` script directly), you'll probably also want to open:
 ```
 22   SSH
 2929 WebSockets for dev mode
@@ -328,7 +330,7 @@ Anyone with admin access can create as many new databases as they want, using an
 
 * `home.html`
 
-To keep things simple and slightly more secure, you can't include any files with the home page, e.g. no images, css, or js.  The one exception is you can use NetCreate's logo: `<img src="/images/netcreate-logo.svg">`.  (The Express server is not set up to serve any other files.)
+To keep things simple and slightly more secure, you can't include any files with the home page, e.g. no images, css, or js.  The one exception is you can use Net.Create's logo: `<img src="/images/netcreate-logo.svg">`.  (The Express server is not set up to serve any other files.)
 
 The server only checks for the existence of the home page on startup, so if you change the home page, you'll need to restart the server to activate it.
 
