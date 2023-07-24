@@ -229,7 +229,7 @@ function DBIsRunning(db) {
  * @return {string}
  */
 function MakeToken(clsId, projId, dataset, numGroups) {
-  const SESSION = require("./netcreate-2018/build/app/unisys/common-session.js");
+  const SESSION = require("./netcreate-itest/app/unisys/common-session.js");
   // from nc-logic.js
   if (typeof clsId !== "string")
     return "args: str classId, str projId, str dataset, int numGroups";

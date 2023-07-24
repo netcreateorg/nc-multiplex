@@ -18,7 +18,7 @@
 const shell = require("shelljs");
 const NCUTILS = require("./modules/nc-utils.js");
 
-const pathToNetcreate = './netcreate-2018/build';
+const pathToNetcreate = './netcreate-itest';
 
 const PRE = '.......nc-start: ';
 
@@ -28,7 +28,7 @@ function writeConfig(data) {
 }
 
 function promiseServer(port) {
-  shell.cd('netcreate-2018/build');
+  shell.cd('netcreate-itest');
   const server = require(`${pathToNetcreate}/brunch-server`);
   return new Promise((resolve, reject) => {
     server({ port }, () => resolve());
