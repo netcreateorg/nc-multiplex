@@ -24,7 +24,7 @@ const PRE = '.......nc-start: ';
 
 function writeConfig(data) {
   let script = NCUTILS.GetNCConfig(data);
-  shell.ShellString(script).to(`${pathToNetcreate}/app/assets/netcreate-config.js`);
+shell.ShellString(script).to(`${pathToNetcreate}/app-config/netcreate-config.js`);
 }
 
 function promiseServer(port) {
