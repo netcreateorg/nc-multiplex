@@ -14,15 +14,15 @@ These instructions are primarily for installing on a local development machine. 
 
 #### Requirements
 * git
-* Node 10+
+* Node v18.x ~Node 10+~
 
-We assume you already have git and node 10+ installed.  We also assume you have `nvm` installed.  Running `nvm use` will set automatically set the right node version.  If you don't have `nvm` installed, just make sure you install NodeJS version 10.22.0 or later.
+We assume you already have git and node v18+ installed (as of July 2023).  We also assume you have `nvm` installed.  Running `nvm use` will set automatically set the right node version.  If you don't have `nvm` installed, just make sure you install NodeJS version 18.16.0 or later.
 
 
 #### 1. Clone `nc-multiplex`
 ```
 cd ~/your-dev-folder/
-git clone https://gitlab.com/netcreate/nc-multiplex.git
+git clone https://github.com/netcreateorg/nc-multiplex.git
 cd ~/your-dev-folder/nc-multiplex
 nvm use
 npm ci
@@ -33,24 +33,24 @@ npm ci
 Install NetCreate INSIDE the `nc-multiplex` folder.  e.g. your directory structure should look something like this:
 ```
 ~/your-dev-folder/nc-multiplex/
-~/your-dev-folder/nc-multiplex/netcreate-2018/
+~/your-dev-folder/nc-multiplex/netcreate-itest/
 ```
 
 ```
 cd ~/your-dev-folder/nc-multiplex
-git clone https://github.com/netcreateorg/netcreate-2018.git
+git clone https://github.com/netcreateorg/netcreate-itest.git
 ```
 
 ...continue with install...
 
 ```
-cd netcreate-2018/build
+cd netcreate-itest
 npm ci
 ```
 
 If this is your first run with a newly cloned repo, run Net.Create once to set configuration files.
 ```
-// cd netcreate-2018/build
+// cd netcreate-itest/build
 ./nc.js --dataset=demo
 ```
 
@@ -65,18 +65,12 @@ ctrl-c
 ```
 
 #### 3. Compile NetCreate for Classroom
-```
-npm run classroom
-```
-We need pre-compile the NetCreate code for the classroom.  This compiles the script to run without autoreload, and lets you test to make sure it can run.
 
-`ctrl-c` to quit the running app.
-
-Alternatively you can use `npm run package` to do it without running the app.
+Use `npm run package` to package the app.
 
 The NetCreate instances spun up by `nc-multiplex` will use the shared compiled code for each NetCreate instance.
 
-**IMPORTANT**: Every time you pull a new version of netcreate-2018, you need to recompile, otherwise, nc-multiplex will use the old compiled code.
+**IMPORTANT**: Every time you pull a new version of netcreate-itest, you need to recompile, otherwise, nc-multiplex will use the old compiled code.
 
 **IMPORTANT**: Do NOT build it with `npm run dev` or NetCreate will try to enable autoreload (used for detecting changes in code and restarting the server during development).  This will result in a slow startup as well as repeated connection failures to port 9485 for autoreload.  If you see messages like this in your console, you probably built NetCrate using `npm run dev`: 
 
@@ -87,6 +81,14 @@ or
 ```
 Firefox can’t establish a connection to the server at ws://*:9485/. auto-reload.js:69:21
 ```
+
+[`npm run classroom` has been deprecated`]
+```
+~npm run classroom~
+```
+~We need pre-compile the NetCreate code for the classroom.  This compiles the script to run without autoreload, and lets you test to make sure it can run.~
+
+~`ctrl-c` to quit the running app.~
 
 
 #### 4. Set your Home Page
@@ -154,7 +156,7 @@ Refresh the manager to view the current list of running databases.
 
 #### 9. Load Existing Graph
 
-The manager lists all the graphs it finds in the `~/your-dev-folder/nc-multiplex/netcreate-2018/build/runtime/` folder.  To load an existing graph:
+The manager lists all the graphs it finds in the `~/your-dev-folder/nc-multiplex/netcreate-itest/runtime/` folder.  To load an existing graph:
 
 1. Make sure you're logged in and your cookie hasn't expired.
 2. Click on the graph link in the "Saved Graphs" box to start the graph.
@@ -180,7 +182,7 @@ You can regenerate the same codes any time.
 
 ## Managing Databases
 
-All databases are stored in the NetCreate runtime folder, e.g. `~/your-dev-folder/nc-multiplex/netcreate-2018/build/runtime/`.  All node processes share the same database files.  So any database you spin up will be in the main runtime folder.
+All databases are stored in the NetCreate runtime folder, e.g. `~/your-dev-folder/nc-multiplex/netcreate-itest/runtime/`.  All node processes share the same database files.  So any database you spin up will be in the main runtime folder.
 
 * Prepopulate the databases and templates by simply copying the `*.loki` and `*.template` files there prior to running `node nc-multiplex.js`.
 
@@ -196,7 +198,7 @@ All databases are stored in the NetCreate runtime folder, e.g. `~/your-dev-folde
 
 * The database named "base" is always started on port 3000 to handle static file requests.  You shouldn't need to touch this graph.
 
-* The default database template used when creating a new project is in `~/your-dev-folder/nc-multiplex/netcreate-2018/build/app/assets/templates/_default.template`.  You can modify this.
+* The default database template used when creating a new project is in `~/your-dev-folder/nc-multiplex/netcreate-itest/app-templates/_default.template`.  You can modify this.
 
 
 ## How it works
