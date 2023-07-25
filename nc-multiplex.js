@@ -148,6 +148,28 @@ const AUTH_MINUTES = 2;  // default = 30
                          // Number of minutes to authorize login cookie
                          // After AUTH_MINUTES, the user wil have to re-login.
 
+// ----------------------------------------------------------------------------
+// check nvm version
+let NODE_VER;
+try {
+  NODE_VER = fs.readFileSync('./.nvmrc', 'utf8').trim();
+} catch (err) {
+  console.error('could not read .nvmrc', err);
+  throw Error(`Could not read .nvmrc ${err}`);
+}
+exec('node --version', (error, stdout, stderr) => {
+  if (stdout) {
+    stdout = stdout.trim();
+    if (stdout !== NODE_VER) {
+      console.log('\x1b[97;41m');
+      console.log(PRE, '*** NODE VERSION MISMATCH ***');
+      console.log(PRE, '.. expected', NODE_VER, 'got', stdout);
+      console.log(PRE, '.. did you remember to run nvm use?\x1b[0m');
+      console.log('');
+    }
+    console.log(PRE, 'NODE VERSION:', stdout, 'OK');
+  }
+});
 
 // ----------------------------------------------------------------------------
 // READ OPTIONAL ARGUMENTS
