@@ -59,7 +59,7 @@ if (primary === undefined) {
   process.exit(1);
 }
 if (count === 1) {
-  console.log(PRE, `using primary repo ${primary.repo}`);
+  console.log(PRE, `\x1b[97;42mfound primary repo ${primary.repo}\x1b[0m`);
 } else {
   console.log(
     PRE,

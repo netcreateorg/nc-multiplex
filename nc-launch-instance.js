@@ -17,9 +17,7 @@
 
 const shell = require('shelljs');
 const NCUTILS = require('./modules/nc-utils');
-const { NC_SERVER_PATH, NC_CONFIG_PATH } = require('./nc-launch-config');
-
-console.log('***', NC_SERVER_PATH, NC_CONFIG_PATH);
+const { NC_PATH, NC_SERVER_PATH, NC_CONFIG_PATH } = require('./nc-launch-config');
 
 const PRE = '...nc-launch-instance:';
 
@@ -29,7 +27,7 @@ function writeConfig(data) {
 }
 
 function promiseServer(port) {
-  shell.cd('netcreate-itest');
+  shell.cd(NC_PATH);
   const server = require(`./${NC_SERVER_PATH}/brunch-server`);
   return new Promise((resolve, reject) => {
     server({ port }, () => resolve());
