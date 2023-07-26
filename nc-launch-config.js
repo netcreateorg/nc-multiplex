@@ -21,9 +21,15 @@ const REPO_PATHS = [
   {
     repo: './netcreate-2018',
     build: 'build',
-    config: 'app/assets'
+    config: 'app/assets',
+    pubConfig: 'netcreate-config.js'
   },
-  { repo: './netcreate-itest', build: '', config: 'app-config' }
+  {
+    repo: './netcreate-itest',
+    build: '',
+    config: 'app-config',
+    pubConfig: 'config/netcreate-config.js'
+  }
 ];
 
 /// RUNTIME DETECTION /////////////////////////////////////////////////////////
@@ -70,13 +76,15 @@ if (count === 1) {
 
 /// EXPORTS ///////////////////////////////////////////////////////////////////
 /// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-const { repo, build, config } = primary;
+const { repo, build, config, pubConfig } = primary;
 const NC_PATH = `./${path.join(repo, build)}`;
 const NC_SERVER_PATH = `./${path.join(repo, build)}`;
 const NC_CONFIG_PATH = `./${path.join(repo, build, config)}`;
+const NC_URL_CONFIG = pubConfig;
 /// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 module.exports = {
   NC_PATH,
   NC_SERVER_PATH,
-  NC_CONFIG_PATH
+  NC_CONFIG_PATH,
+  NC_URL_CONFIG
 };

@@ -107,7 +107,7 @@ app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 
 const NCUTILS = require('./modules/nc-utils.js');
-const { NC_SERVER_PATH } = require('./nc-launch-config');
+const { NC_SERVER_PATH, NC_URL_CONFIG } = require('./nc-launch-config');
 
 const PRE = '...nc-multiplex: '; // console.log prefix
 
@@ -703,7 +703,7 @@ async function RouterGraph(req) {
 //
 // This has to go before `/graph/:graph/:file?` or it won't get triggered
 //
-app.get('/graph/:graph/netcreate-config.js', (req, res) => {
+app.get(`/graph/:graph/${NC_URL_CONFIG}`, (req, res) => {
   const db = req.params.graph;
   let response = '';
   console.log('############ returning netcreate-config.js for', db);
