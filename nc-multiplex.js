@@ -107,7 +107,7 @@ app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 
 const NCUTILS = require('./modules/nc-utils.js');
-const { NC_BUILD_PATH } = require('./nc-launch-config');
+const { NC_SERVER_PATH } = require('./nc-launch-config');
 
 const PRE = '...nc-multiplex: '; // console.log prefix
 
@@ -246,7 +246,8 @@ function DBIsRunning(db) {
  * @return {string}
  */
 function MakeToken(clsId, projId, dataset, numGroups) {
-  const SESSION = require(`${NC_BUILD_PATH}/app/unisys/common-session.js`);
+  const rpath = `${NC_SERVER_PATH}/app/unisys/common-session.js`;
+  const SESSION = require(rpath);
   // from nc-logic.js
   if (typeof clsId !== 'string')
     return 'args: str classId, str projId, str dataset, int numGroups';
