@@ -1,0 +1,11 @@
+# ignore build system directories
+/node_modules
+
+# ignore subfolder repos. These are installed manually through git clone.
+# SEE ALSO: VSCode workspace settings that disable autorepo scanning so this works.
+/netcreate-2018
+/netcreate-itest
+
+# ignore custom password file
+# this should never be commited to the repo to expose the password
+SESAME
