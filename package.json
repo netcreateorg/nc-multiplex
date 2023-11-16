@@ -1,13 +1,12 @@
 {
-  "name": "nodeapp",
+  "name": "nc-multiplex",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
   "scripts": {
-    "start": "node nc-router.js"
+    "start": "node nc-multiplex.js",
+    "clean": "rm -fr node_modules && echo 'rerun npm ci after clean'"
   },
   "author": "",
-  "license": "ISC",
+  "license": "MIT",
   "dependencies": {
     "cookie-parser": "^1.4.5",
     "crypto": "^1.0.1",
