@@ -6,8 +6,9 @@ Normally, you can only run a single Net.Create graph instance per server.  In or
 
 It is a node-based reverse proxy / process manager that can spin up individual Net.Create graph instances running their own separate node processes on a single hosted server.
 
+---
 
-## Installation
+# Installation
 
 This repo contains only the reverse proxy server.  You will need to install the Net.Create repo separately.
 
@@ -83,14 +84,6 @@ or
 ```
 Firefox can’t establish a connection to the server at ws://*:9485/. auto-reload.js:69:21
 ```
-
-[`npm run classroom` has been deprecated`]
-```
-~npm run classroom~
-```
-~We need pre-compile the NetCreate code for the classroom.  This compiles the script to run without autoreload, and lets you test to make sure it can run.~
-
-~`ctrl-c` to quit the running app.~
 
 
 #### 4. Set your Home Page
@@ -216,6 +209,24 @@ This is accomplished via an express server that handles all the requests.  The a
 Because the system keeps spinning up new resources, we do have to keep an eye on them, as each instance will eat up a certain amount of memory and CPU cycles.  This is why there is a maximum active graph setting.  We'll have to do some testing to see where we should set the max.
 
 Each process will continue running until it is explicitly killed.  
+
+---
+
+# Daily Operations
+
+After the first time installation, you'll generally need to do this every time you:
+* update the `nc-multiplex` repo, or
+* update the `netcreate-itest` repo
+
+To start up:
+1. `cd your-dev-folder/nc-mutiplex` 
+2. `git pull` 
+3. If you've updated the netcreate-itest repo: 
+	a. `cd netcreate-itest`
+	b. `git pull` 
+	c. `npm run package`
+4.  `cd your-dev-folder/nc-mutiplex` 
+5.  `node nc-multiplex.js`
 
 ---
 
@@ -349,3 +360,12 @@ The server only checks for the existence of the home page on startup, so if you 
 The server only checks for the existence of the password override on startup, so if you change the password, you'll need to restart the server to activate it.
 
 After you successfully login, the system will set a cookie that allows you to access the manage page for a few minutes (30 by default).  You can customize the number of minutes your authorization cookie is valid for with the `AUTH_MINUTES` variable.
+
+
+---
+
+# Troubleshooting
+
+* Repeated `autoreload.js` calls (slow performance)
+
+   If you are experience sluggish performance on the server and see a lot of `autoreload.js` messages in the browser Developer Tools "Network" tab, you probably inadvertently built and are running the `dev` version of Net.Create.  Make sure you run `npm run package` (step 3) before running `node nc-multiplex.js`.
