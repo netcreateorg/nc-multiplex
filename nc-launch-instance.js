@@ -19,6 +19,11 @@ const shell = require('shelljs');
 const NCUTILS = require('./modules/nc-utils');
 const { NC_PATH, NC_SERVER_PATH, NC_CONFIG_PATH } = require('./nc-launch-config');
 
+// SRI HACK IN TIMESTAMP
+const {strDateStamp, strTimeStamp} = require('./modules/nc-logging-utils');
+const TSTART = `${strDateStamp()} ${strTimeStamp()}`; // Start time
+const $T=()=>`${strDateStamp()} ${strTimeStamp()}`; // Update time
+
 const PRE = '...nc-launch-instance:';
 
 function writeConfig(data) {
@@ -35,14 +40,14 @@ function promiseServer(port) {
 }
 
 process.on('message', data => {
-  console.log(PRE);
-  console.log(PRE, 'STARTING DB', data.db);
-  console.log(PRE);
+  console.log(PRE,$T());
+  console.log(PRE,$T(), 'STARTING DB', data.db);
+  console.log(PRE,$T());
 
-  console.log(PRE, '1. Setting netcreate-config.js.');
+  console.log(PRE,$T(), '1. Setting netcreate-config.js.');
   writeConfig(data);
 
-  console.log(PRE, '2. Starting server');
+  console.log(PRE,$T(), '2. Starting server');
   startServer(data.port);
 });
 

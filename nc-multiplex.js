@@ -102,13 +102,18 @@ const path = require('path');
 const express = require('express');
 const cookieParser = require('cookie-parser');
 const crypto = require('crypto');
+
+// SRI HACK IN TIMESTAMP
+const {strDateStamp, strTimeStamp} = require('./modules/nc-logging-utils');
+const TSTART = `${strDateStamp()} ${strTimeStamp()}`; // Start time
+const $T=()=>`${strDateStamp()} ${strTimeStamp()}`; // Update time
+
 const app = express();
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 
 const NCUTILS = require('./modules/nc-utils.js');
 const { NC_SERVER_PATH, NC_URL_CONFIG } = require('./nc-launch-config');
-
 const PRE = '...nc-multiplex: '; // console.log prefix
 
 // SETTINGS
@@ -161,12 +166,12 @@ exec('node --version', (error, stdout, stderr) => {
     stdout = stdout.trim();
     if (stdout !== NODE_VER) {
       console.log('\x1b[97;41m');
-      console.log(PRE, '*** NODE VERSION MISMATCH ***');
-      console.log(PRE, '.. expected', NODE_VER, 'got', stdout);
-      console.log(PRE, '.. did you remember to run nvm use?\x1b[0m');
+      console.log(PRE, $T(), '*** NODE VERSION MISMATCH ***');
+      console.log(PRE, $T(), '.. expected', NODE_VER, 'got', stdout);
+      console.log(PRE, $T(), '.. did you remember to run nvm use?\x1b[0m');
       console.log('');
     }
-    console.log(PRE, 'NODE VERSION:', stdout, 'OK');
+    console.log(PRE, $T(), 'NODE VERSION:', stdout, 'OK');
   }
 });
 
@@ -570,9 +575,9 @@ function PromiseApp(db) {
     //    send a message back to this handler, which in turn
     //    sends the new spec back to SpawnApp
     forked.on('message', msg => {
-      console.log(PRE + 'Received message from spawned fork:', msg);
+      console.log(PRE, $T(), 'Received message from spawned fork:', msg);
       console.log(PRE);
-      console.log(PRE + `${db} STARTED!`);
+      console.log(PRE, $T(), `${db} STARTED!`);
       console.log(PRE);
       const newProcessDef = {
         db,
@@ -627,9 +632,8 @@ function OutOfMemory() {
 
 // ----------------------------------------------------------------------------
 // INIT
-console.log(`\n\n\n`);
-console.log(PRE);
-console.log(PRE + 'STARTED!');
+console.log(`\n\n\n`)
+console.log(PRE, $T(), 'STARTED!');
 console.log(PRE);
 
 // START BASE APP
@@ -668,10 +672,10 @@ async function RouterGraph(req) {
   let route = childProcesses.find(route => route.db === db);
   if (route) {
     // a) Yes. Use existing route!
-    console.log(PRE + '--> mapping to ', route.db, route.port);
+    console.log(PRE + $T() + '--> mapping to ', route.db, route.port);
     port = route.port;
   } else if (PortPoolIsEmpty()) {
-    console.log(PRE + '--> No more ports.  Not spawning', db);
+    console.log(PRE + $T() + '--> No more ports.  Not spawning', db);
     // b) No more ports available.
     path = `/error_out_of_ports`;
   } else if (OutOfMemory()) {
@@ -679,7 +683,7 @@ async function RouterGraph(req) {
     path = `/error_out_of_memory`;
   } else if (ALLOW_NEW || ALLOW_SPAWN) {
     // c) Not defined yet, Create a new one.
-    console.log(PRE + '--> not running yet, starting new', db);
+    console.log(PRE + $T() + '--> not running yet, starting new', db);
     port = await SpawnApp(db);
   } else {
     // c) Not defined yet.  Report error.
@@ -759,31 +763,31 @@ function SendErrorResponse(res, msg) {
 
 // HANDLE NO DATABASE -- RETURN ERROR
 app.get('/error_no_database', (req, res) => {
-  console.log(PRE + '================== Handling ERROR NO DATABASE!');
+  console.log(PRE + $T() + '================== Handling ERROR NO DATABASE!');
   SendErrorResponse(res, 'This graph is not currently open.');
 });
 
 // HANDLE NOT AUTHORIZED -- RETURN ERROR
 app.get('/error_not_authorized', (req, res) => {
-  console.log(PRE + '================== Handling ERROR NOT AUTHORIZED!');
+  console.log(PRE + $T() + '================== Handling ERROR NOT AUTHORIZED!');
   SendErrorResponse(res, 'Not Authorized.');
 });
 
 // HANDLE OUT OF PORTS -- RETURN ERROR
 app.get('/error_out_of_ports', (req, res) => {
-  console.log(PRE + '================== Handling ERROR OUT OF PORTS!');
+  console.log(PRE + $T() + '================== Handling ERROR OUT OF PORTS!');
   SendErrorResponse(res, "Ran out of ports.  Can't start the graph.");
 });
 
 // HANDLE OUT OF MEMORY -- RETURN ERROR
 app.get('/error_out_of_memory', (req, res) => {
-  console.log(PRE + '================== Handling ERROR OUT OF MEMORY!');
+  console.log(PRE + $T() + '================== Handling ERROR OUT OF MEMORY!');
   SendErrorResponse(res, "Ran out of Memory.  Can't start the graph.");
 });
 
 // HANDLE MISSING TRAILING ".../" -- RETURN ERROR
 app.get('/graph/:file', (req, res) => {
-  console.log(PRE + '================== Handling BAD URL!');
+  console.log(PRE + $T() + '================== Handling BAD URL!');
   SendErrorResponse(res, "Bad URL. Missing trailing '/'.");
 });
 
@@ -792,7 +796,7 @@ app.get('/graph/:file', (req, res) => {
 
 // HANDLE "/kill/:graph" -- KILL REQUEST
 app.get('/kill/:graph/', (req, res) => {
-  console.log(PRE + '================== Handling / KILL!');
+  console.log(PRE + $T() + '================== Handling / KILL!');
   const db = req.params.graph;
   res.set('Content-Type', 'text/html');
   let response = `<h1>NetCreate Manager</h1>`;
@@ -819,7 +823,7 @@ app.get('/kill/:graph/', (req, res) => {
 
 // HANDLE "/maketoken" -- GENERATE TOKENS
 app.get('/maketoken/:clsid/:projid/:dataset/:numgroups', (req, res) => {
-  console.log(PRE + '================== Handling / MAKE TOKEN!');
+  console.log(PRE + $T() + '================== Handling / MAKE TOKEN!');
   const { clsid, projid, dataset, numgroups } = req.params;
   let response = MakeToken(clsid, projid, dataset, parseInt(numgroups));
   res.set('Content-Type', 'text/html');
@@ -849,7 +853,7 @@ app.get('/maketoken/:clsid/:projid/:dataset/:numgroups', (req, res) => {
 
 // HANDLE "/manage" -- MANAGER PAGE
 app.get('/manage', (req, res) => {
-  console.log(PRE + '================== Handling / MANAGE!');
+  console.log(PRE + $T() + '================== Handling / MANAGE!');
   if (CookieIsValid(req)) {
     res.set('Content-Type', 'text/html');
     res.send(RenderManager());
@@ -859,7 +863,7 @@ app.get('/manage', (req, res) => {
 });
 
 app.get('/login', (req, res) => {
-  console.log(PRE + '================== Handling / LOGIN!');
+  console.log(PRE + $T() + '================== Handling / LOGIN!');
   if (CookieIsValid(req)) {
     // Cookie already set, no need to log in, redirect to manage
     res.redirect(`/manage`);
@@ -871,7 +875,7 @@ app.get('/login', (req, res) => {
 });
 
 app.post('/authorize', (req, res) => {
-  console.log(PRE + '================== Handling / AUTHORIZE!');
+  console.log(PRE + $T() + '================== Handling / AUTHORIZE!');
   let str = new String(req.body.password);
   if (req.body.password === PASSWORD) {
     res.cookie('nc-multiplex-auth', PASSWORD_HASH, {
@@ -888,7 +892,7 @@ app.post('/authorize', (req, res) => {
 
 // HANDLE "/" -- HOME PAGE
 app.get('/', (req, res) => {
-  console.log(PRE + '================== Handling / ROOT!');
+  console.log(PRE + $T() + '================== Handling / ROOT!');
   if (HOMEPAGE_EXISTS) {
     res.sendFile(path.join(__dirname, 'home.html'));
   } else {
@@ -938,4 +942,4 @@ app.use(
 //
 //  START PROXY
 
-app.listen(PORT_ROUTER, () => console.log(PRE + `running on port ${PORT_ROUTER}.`));
+app.listen(PORT_ROUTER, () => console.log(PRE, $T(), `running on port ${PORT_ROUTER}.`));
