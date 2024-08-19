@@ -24,7 +24,7 @@ const {strDateStamp, strTimeStamp} = require('./modules/nc-logging-utils');
 const TSTART = `${strDateStamp()} ${strTimeStamp()}`; // Start time
 const $T=()=>`${strDateStamp()} ${strTimeStamp()}`; // Update time
 
-const PRE = '...nc-launch-instance:';
+const PRE = '_MUX_LN  -';
 
 function writeConfig(data) {
   let script = NCUTILS.GetNCConfig(data);
@@ -41,13 +41,10 @@ function promiseServer(port) {
 
 process.on('message', data => {
   console.log(PRE,$T());
-  console.log(PRE,$T(), 'STARTING DB', data.db);
-  console.log(PRE,$T());
-
-  console.log(PRE,$T(), '1. Setting netcreate-config.js.');
+  console.log(PRE, 'STARTING DB', data.db);
+  console.log(PRE, '1. Setting netcreate-config.js.');
   writeConfig(data);
-
-  console.log(PRE,$T(), '2. Starting server');
+  console.log(PRE, '2. Starting server');
   startServer(data.port);
 });
 

@@ -17,6 +17,7 @@
     "shelljs": "^0.8.4"
   },
   "devDependencies": {
-    "eslint-config-prettier": "^8.8.0"
+    "eslint-config-prettier": "^8.8.0",
+    "strip-ansi-cli": "^4.0.0"
   }
 }

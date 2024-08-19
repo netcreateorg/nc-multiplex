@@ -13,7 +13,7 @@ const path = require('node:path');
 
 /// CONSTANTS & DECLARATIONS //////////////////////////////////////////////////
 /// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-const PRE = '...nc-launch-config:';
+const PRE = '_MUX_CNF -';
 const SPC = ''.padStart(PRE.length, ' ');
 /// REPO_PATHS is listed in order of precedence
 /// if multiple matches are found, a warning will be emitted
