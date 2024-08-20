@@ -5,6 +5,7 @@
 # also run it directly from the command line.
 
 printf "starting nc-multiplex-sri.js\n"
+printf ".. browse to http://host:80/manage for control\n"
 printf ".. output is appended to log.txt\n"
 printf ".. press ctrl+c to stop.\n"
 
