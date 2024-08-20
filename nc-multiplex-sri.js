@@ -101,6 +101,7 @@ const PROCESS_MAX = 30; // Set this to limit the number of running processes
 const MEMORY_MIN = 256; // MB. Each node process is generally ~30 MB.
 const AUTO_NEW = false; // Set to true to allow auto-spawning a new database via url.
 const AUTH_MINUTES = 2; // Minutes. Number of minutes to authorize login cookie
+const HEARTBEAT = 15; // Minutes. Number of minutes between memory log heartbeats
 /// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 /// detected node version
 let NVMRC;
@@ -120,6 +121,32 @@ let m_child_processes = []; // array of forked process + meta info = { db, port,
 /// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 const { strDateStamp, strTimeStamp } = NCLOG;
 const $T = () => `${strDateStamp()} ${strTimeStamp()}`; // return timestamp string
+/// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+/** periodically log memory usage and running instances to console */
+function m_MemLog() {
+  let { used, total, pids } = m_MemoryReport();
+  console.log(
+    PRE,
+    '* MEMORY HEARTBEAT',
+    $T(),
+    `heapUsed ${used}mb / heapTotal ${total}mb`
+  );
+  const out = pids.split('\n');
+  if (out.length > 1)
+    out.forEach(line => {
+      if (line.trim().length > 0) console.log(PRE, '*', line.trim());
+    });
+}
+/// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+setInterval(m_MemLog, HEARTBEAT * 60 * 1000); // log memory usage every X minutes
+// setInterval(m_MemLog, 1000); // log memory usage every 15 minutes
+
+/// UTILITY METHODS ///////////////////////////////////////////////////////////
+/// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+/** Number formatter - from stackoverflow.com/questions/2901102/ */
+function u_commas(x) {
+  return x.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+}
 
 /// HELPER METHODS ////////////////////////////////////////////////////////////
 /// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -135,7 +162,7 @@ function m_GetInstancePIDs() {
   const stdout = execSync('ps | grep nc-launch-instance.js');
   const regex = /(\d+).+\/versions\/node\/(.+)/;
   const lines = stdout.toString().split('\n');
-  let out = 'DETECTED NC-LAUNCH INSTANCES\n\n';
+  let out = '';
   lines.forEach(line => {
     if (line.includes('/bin/node ./nc-launch-instance.js')) {
       const match = line.match(regex);
@@ -157,12 +184,22 @@ function m_SendErrorResponse(res, msg) {
     <p><a href="/manage">Back to Multiplex Manager</a></p>`
   );
 }
-
-/// UTILITY METHODS ///////////////////////////////////////////////////////////
 /// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-/** Number formatter - from stackoverflow.com/questions/2901102/ */
-function u_commas(x) {
-  return x.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+/** return memory parameters */
+function m_MemoryReport() {
+  const mem = process.memoryUsage();
+  const used = u_commas(Math.trunc(mem.heapUsed / 1024));
+  const total = u_commas(mem.heapTotal / 1024);
+  const percent = (100 * (mem.heapUsed / mem.heapTotal)).toFixed(2);
+  const remaining = u_commas(Math.trunc((mem.heapTotal - mem.heapUsed) / 1024));
+  const pids = m_GetInstancePIDs();
+  return {
+    used,
+    total,
+    percent,
+    remaining,
+    pids
+  };
 }
 
 /// SESSION OPERATIONS ////////////////////////////////////////////////////////
@@ -244,8 +281,12 @@ function PickPort() {
   // make sure that there are no duplicates in the pool
   const dpool = Array.from(new Set(m_port_pool));
   if (dpool.length !== m_port_pool.length) {
-    console.log(PRE,$T(), 'ERROR: Duplicate port indices in pool! This should not happen!');
-    console.log(PRE,$T(), 'Pool:', m_port_pool);
+    console.log(
+      PRE,
+      $T(),
+      'ERROR: Duplicate port indices in pool! This should not happen!'
+    );
+    console.log(PRE, $T(), 'Pool:', m_port_pool);
   }
   return result;
 }
@@ -255,7 +296,12 @@ function PickPort() {
  */
 function ReleasePort(index) {
   if (m_port_pool.find(port => port === index)) {
-    console.log(PRE,$T(), 'ERROR: Port already in pool! This should not happen!', index);
+    console.log(
+      PRE,
+      $T(),
+      'ERROR: Port already in pool! This should not happen!',
+      index
+    );
     // throw 'ERROR: Port already in pool! This should not happen! ' + index;
   }
   m_port_pool.push(index);
@@ -433,17 +479,15 @@ function RenderGenerateTokensForm() {
 }
 /// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 function RenderMemoryReport() {
+  const { used, total, percent, remaining, pids } = m_MemoryReport();
   const mem = process.memoryUsage();
-  let response = `<p>MEMORY :: Used:
-    ${u_commas(Math.trunc(mem.heapUsed / 1024))}mb /
-    ${u_commas(mem.heapTotal / 1024)}mb
-    (${(100 * (mem.heapUsed / mem.heapTotal)).toFixed(2)}%) `;
-  response += ` :: Remaining: ${u_commas(
-    Math.trunc((mem.heapTotal - mem.heapUsed) / 1024)
-  )}mb`;
+
+  let response = `<p>MEMORY`;
+  response += ` :: Used: ${used}mb / ${total}mb (${percent}%) `;
+  response += ` :: Remaining: ${remaining}mb`;
   response += ` :: Out of memory: ${OutOfMemory()}</p>`;
   const psOut = m_GetInstancePIDs();
-  response += `<pre>${psOut}</pre>`;
+  response += `<pre>DETECTED LAUNCH INSTANCES\n${psOut}</pre>`;
   return response;
 }
 
@@ -585,7 +629,12 @@ async function RouterGraph(req) {
     port = await SpawnApp(db);
   } else {
     // c) Not defined yet.  Report error.
-    console.log(PRE, $T(), '.. not running yet, AUTO_NEW is false so no db for you', db);
+    console.log(
+      PRE,
+      $T(),
+      '.. not running yet, AUTO_NEW is false so no db for you',
+      db
+    );
     path = `/error_no_database`;
   }
   return {
@@ -659,7 +708,6 @@ const app = express();
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 
-
 /// EXPRESS DATA ACCESS ROUTES ////////////////////////////////////////////////
 /// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 /** HANDLE /graph/:graph/netcreate-config.js
@@ -672,7 +720,12 @@ app.get(`/graph/:graph/${NC_URL_CONFIG}`, (req, res) => {
   let response = '';
   const child = m_child_processes.find(child => child.db === db);
   if (child) {
-    console.log(PRE, $T(), 'returning graph-specific netcreate-config.js for', child.db);
+    console.log(
+      PRE,
+      $T(),
+      'returning graph-specific netcreate-config.js for',
+      child.db
+    );
     response += NCUTILS.GetNCConfig(child);
   } else {
     console.log(PRE, $T(), 'no graph-specific netcreate-config.js found for', db);
