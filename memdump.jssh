@@ -83,20 +83,20 @@ const { pids, sysTotalMB, sysFreeMB, sysPercent, sysMinMem, warnLowMem } = mem;
 const { heapTotal, heapUsed, heapPercent } = mem;
 
 LOG();
-LOG(`*** EXAMPLE MEMORY REPORT ***`);
+LOG(`# EXAMPLE MEMORY REPORT`);
 LOG();
-LOG(`1. Running Instances:`);
+LOG(`# DETECTED PROXY INSTANCES`);
 if (pids.length === 0) {
-  LOG(`   - no instances found -`);
+  LOG(`  - no instances found -`);
 }
 LOG(pids);
 
-LOG(`2. Memory Report:`);
-LOG(`   system total: ${sysTotalMB} MB / free: ${sysFreeMB} MB / ${sysPercent}% used`);
-LOG(`   v8 heap total: ${heapTotal} KB / used: ${heapUsed} KB / ${heapPercent}% used`);
+LOG(`# MEMORY USAGE`);
+LOG(`  system total: ${sysTotalMB} MB / free: ${sysFreeMB} MB / ${sysPercent}% used`);
+LOG(`  v8 heap total: ${heapTotal} KB / used: ${heapUsed} KB / ${heapPercent}% used`);
 if (warnLowMem) {
-  LOG(`   WARNING: free system memory is below ${sysMinMem} MB`);
+  LOG(`  WARNING: free system memory is below ${sysMinMem} MB`);
 } else {
-  LOG(`   free system memory is above ${sysMinMem} MB`);
+  LOG(`  free system memory is above ${sysMinMem} MB`);
 }
 LOG();
