@@ -142,7 +142,8 @@ function m_GetInstancePIDs() {
       const match = line.match(regex);
       if (match) {
         const [_, pid, cli] = match;
-        out += `  PID:${pid}   .nvm/versions/${cli}\n`;
+        const paddedPid = pid.padEnd(7, ' ');
+        out += `  ${paddedPid} .nvm/versions/${cli}\n`;
       }
     }
   });

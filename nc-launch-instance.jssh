@@ -1,13 +1,14 @@
 #!/usr/bin/env node
-/** nc-launch-instance.js
- *
- *  This shell script will start NetCreate brunch server directly, bypassing nc.js
- *  It is forked by `nc-multiplex.js` directly and parses process messages.
- * 
- *  For correct operation, the main instance repo (e.g. netcreate-itest) should
- *  be in the same directory, and it should have had `npm run package` run once.
- * 
- */
+
+/*///////////////////////////////// ABOUT \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\*\
+
+  This shell script will start NetCreate brunch server directly, bypassing nc.js
+  It is forked by `nc-multiplex.js` directly and parses process messages.
+
+  For correct operation, the main instance repo (e.g. netcreate-itest) should be
+  in the same directory, and it should have had `npm run package` run once.
+
+\*\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\ * /////////////////////////////////////*/
 
 const shell = require('shelljs');
 const NCUTILS = require('./modules/nc-utils');
