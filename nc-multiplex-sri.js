@@ -70,6 +70,7 @@ let m_child_processes = []; // array of forked process + meta info = { db, port,
 /// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 const CYN = '\x1b[96m'; // cyan
 const RST = '\x1b[0m'; // reset
+const RED = '\x1b[91m'; // red
 
 /// SRI HACK IN TIMESTAMP /////////////////////////////////////////////////////
 /// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -508,7 +509,7 @@ function m_PromiseApp(db) {
     forked.on('message', msg => {
       const { event } = msg;
       if (event === 'SUCCESS') {
-        console.log(PRE, `${CYN} instance '${db}' running on port ${appport}`, RST);
+        console.log(PRE, `${CYN}proxy success: '${db}' running on port ${appport}`, RST);
         const newProcessDef = {
           db,
           port: ports.appport,
@@ -519,7 +520,7 @@ function m_PromiseApp(db) {
         };
         resolve(newProcessDef); // pass to SpawnApp
       } else {
-        console.log(PRE, `instance '${db}' failed to start`);
+        console.log(PRE, `${RED}instance '${db}' failed to start`,RST);
         reject(`Failed to start instance '${db}'`);
       }
     });
@@ -586,7 +587,7 @@ async function RouterGraph(req) {
   let route = m_child_processes.find(route => route.db === db);
   if (route) {
     // a) Yes. Use existing route!
-    console.log(PRE, $T(), '.. mapping to', route.db, route.port);
+    console.log(PRE, $T(), `.. proxying /graph/${route.db}:80 to :${route.port}`);
     port = route.port;
   } else if (PortPoolIsEmpty()) {
     // b) No more ports available.
