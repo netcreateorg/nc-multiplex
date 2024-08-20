@@ -137,9 +137,6 @@ function m_MemLog() {
       if (line.trim().length > 0) console.log(PRE, '*', line.trim());
     });
 }
-/// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-setInterval(m_MemLog, HEARTBEAT * 60 * 1000); // log memory usage every X minutes
-// setInterval(m_MemLog, 1000); // log memory usage every 15 minutes
 
 /// UTILITY METHODS ///////////////////////////////////////////////////////////
 /// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -702,7 +699,12 @@ PASSWORD_HASH = GetHash(PASSWORD);
 // Most imports/requires do not specify the db route /graph/dbname/
 // so we need to provide a base app that responds to those static file
 // requests.  This starts a generic "base" dataset at port 3000.
+
 SpawnApp('base');
+
+// start heartbeat timer and initial memory log
+m_MemLog();
+setInterval(m_MemLog, HEARTBEAT * 60 * 1000); // log memory usage every X minutes
 
 const app = express();
 app.use(express.urlencoded({ extended: true }));
