@@ -13,7 +13,7 @@ const path = require('node:path');
 
 /// CONSTANTS & DECLARATIONS //////////////////////////////////////////////////
 /// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-const PRE = '_MUX_CNF -';
+const PRE = '_LCONFIG -';
 const SPC = ''.padStart(PRE.length, ' ');
 /// REPO_PATHS is listed in order of precedence
 /// if multiple matches are found, a warning will be emitted
@@ -65,7 +65,7 @@ if (primary === undefined) {
   process.exit(1);
 }
 if (count === 1) {
-  console.log(PRE, `\x1b[97;42mfound primary repo ${primary.repo}\x1b[0m`);
+  console.log(PRE, `launching repo instance in ${primary.repo}`);
 } else {
   console.log(
     PRE,

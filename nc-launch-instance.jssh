@@ -1,54 +1,58 @@
 #!/usr/bin/env node
 /** nc-launch-instance.js
  *
- *  This shell script will start NetCreate
- *  brunch server directly, bypassing nc.js
- *
- *  It is used in multi-db environments to start up
- *  multiple nc.js instances.
- *
- *  Generally it is not called directly, but
- *  is called by `nc-multiplex.js`.
- *
- *  It assumes that the app has been built with npm run package
- *
+ *  This shell script will start NetCreate brunch server directly, bypassing nc.js
+ *  It is forked by `nc-multiplex.js` directly and parses process messages.
+ * 
+ *  For correct operation, the main instance repo (e.g. netcreate-itest) should
+ *  be in the same directory, and it should have had `npm run package` run once.
+ * 
  */
 
 const shell = require('shelljs');
 const NCUTILS = require('./modules/nc-utils');
 const { NC_PATH, NC_SERVER_PATH, NC_CONFIG_PATH } = require('./nc-launch-config');
 
-// SRI HACK IN TIMESTAMP
+/// SRI HACK IN TIMESTAMP /////////////////////////////////////////////////////
+/// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 const {strDateStamp, strTimeStamp} = require('./modules/nc-logging-utils');
 const TSTART = `${strDateStamp()} ${strTimeStamp()}`; // Start time
 const $T=()=>`${strDateStamp()} ${strTimeStamp()}`; // Update time
 
-const PRE = '_MUX_LN  -';
+/// CONSTANTS & DECLARATIONS //////////////////////////////////////////////////
+/// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+const PRE = '_LAUNCH  -';
+const CYN = '\x1b[46m';
+const RST = '\x1b[0m';
 
-function writeConfig(data) {
+/// HELPER FUNCTIONS //////////////////////////////////////////////////////////
+/// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+function m_WriteConfig(data) {
   let script = NCUTILS.GetNCConfig(data);
   shell.ShellString(script).to(`./${NC_CONFIG_PATH}/netcreate-config.js`);
 }
-
-function promiseServer(port) {
+/// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+function m_PromiseServer(port) {
   shell.cd(NC_PATH);
   const server = require(`./${NC_SERVER_PATH}/brunch-server`);
   return new Promise((resolve, reject) => {
     server({ port }, () => resolve());
   });
 }
+/// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+async function m_StartServer(port) {
+  await m_PromiseServer(port);
+  const msg = {
+    event: 'SUCCESS'
+  };    
+  process.send(msg);
+}
 
+/// IPC RUNTIME OPERATIONS ////////////////////////////////////////////////////
+/// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 process.on('message', data => {
-  console.log(PRE,$T());
-  console.log(PRE, 'STARTING DB', data.db);
-  console.log(PRE, '1. Setting netcreate-config.js.');
-  writeConfig(data);
-  console.log(PRE, '2. Starting server');
-  startServer(data.port);
+  console.log(PRE, CYN, $T(),`LAUNCHING DB '${data.db}'`,RST);
+  m_WriteConfig(data);
+  m_StartServer(data.port);
 });
 
-async function startServer(port) {
-  await promiseServer(port);
-  console.log(`${PRE} 3. Server started on port ${port}!`);
-  process.send('nc-launch-instance.js: Completed!');
-}

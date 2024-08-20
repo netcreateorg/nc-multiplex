@@ -27,6 +27,7 @@
 
 const { createProxyMiddleware } = require('http-proxy-middleware');
 const { fork, exec, execSync } = require('child_process');
+const os = require('os');
 const fs = require('fs');
 const path = require('path');
 const express = require('express');
@@ -38,55 +39,6 @@ const SESSION = require(`${NC_SERVER_PATH}/app/unisys/common-session.js`);
 //
 const NCUTILS = require('./modules/nc-utils.js');
 const NCLOG = require('./modules/nc-logging-utils');
-
-/*/
-
-  ## PORT SCHEME
-
-  The proxy server runs on port 80, hosting various management routes as well as
-  the /graph/<db>/ proxying
-
-  - Base application port is 3000
-  - Base websocket port is 4000
-
-  When the app is started, we initialize a pool of ports indices based on the
-  PROCESS_MAX value. 3000 is reserved for the base app, and a check in the /kill
-  route prevents the base app prevents the port from being released
-
-  When a process is spawned, we grab from the pool of port indices, then
-  generate new port numbers based on the index, where the app port and the
-  websocket (net) port share the same basic index, e.g.
-
-  {
-    index: 2, appport: 3002, netport: 4002
-  }
-
-  When the process is killed, the port index is returned to the pool and
-  re-used.
-
-  ## netcreate-config.js / NC_CONFIG
-
-  NC_CONFIG is actually used by both the server-side scripts and client-side
-  scripts to set the active database, IP, ports, netports, and google analytics
-  code.
-
-  As such, it is generated twice:
-
-  1. server-side: nc-start.js will generate a local file version into
-     /build/app/assets where it is used by brunch-server.js, brunch-config.js,
-     and server-database.js during the app start process.
-
-  2. client-side: nc-multiplex.js will then dynamically generate
-     netcreate-config.js for each graph's http request.
-
-  REVIEW: There is a potential conflict server-side if two graphs are started up
-  at the same time and the newly generated netcreate-config.js files cross each
-  other.
-
-  REVIEW: The dynamically generated client-side version should probably be
-  cached.
-
-/*/
 
 /// CONSTANTS & DECLARATIONS //////////////////////////////////////////////////
 /// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -109,13 +61,15 @@ let NVMRC;
 const argv = require('minimist')(process.argv.slice(2));
 const GOOGLEA = argv['googlea'];
 const IP = argv['ip'];
-const m_port_pool = []; // array of available port indices, usu [1...100]
-
+const m_proxy_pool = []; // array of available port indices, usu [1...100]
 /// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 let HOMEPAGE_EXISTS; // Flag for existence of home.html override
 let PASSWORD; // Either default password or password in `SESAME` file
 let PASSWORD_HASH; // Hash generated from password
 let m_child_processes = []; // array of forked process + meta info = { db, port, netport, portindex, process };
+/// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+const CYN = '\x1b[96m'; // cyan
+const RST = '\x1b[0m'; // reset
 
 /// SRI HACK IN TIMESTAMP /////////////////////////////////////////////////////
 /// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -124,25 +78,19 @@ const $T = () => `${strDateStamp()} ${strTimeStamp()}`; // return timestamp stri
 /// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 /** periodically log memory usage and running instances to console */
 function m_MemLog() {
-  let { used, total, pids } = m_MemoryReport();
+  let { heapUsed, heapTotal, heapPercent, sysFreeGB, unit, pids } = m_MemoryReport();
   console.log(
     PRE,
     '* MEMORY HEARTBEAT',
     $T(),
-    `heapUsed ${used}mb / heapTotal ${total}mb`
+    `- nodeHeap ${heapUsed} / ${heapTotal}${unit} (${heapPercent}%)`,
+    `- freeMem ${sysFreeGB}GB`
   );
   const out = pids.split('\n');
   if (out.length > 1)
     out.forEach(line => {
       if (line.trim().length > 0) console.log(PRE, '*', line.trim());
     });
-}
-
-/// UTILITY METHODS ///////////////////////////////////////////////////////////
-/// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-/** Number formatter - from stackoverflow.com/questions/2901102/ */
-function u_commas(x) {
-  return x.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
 }
 
 /// HELPER METHODS ////////////////////////////////////////////////////////////
@@ -183,19 +131,30 @@ function m_SendErrorResponse(res, msg) {
 }
 /// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 /** return memory parameters */
-function m_MemoryReport() {
-  const mem = process.memoryUsage();
-  const used = u_commas(Math.trunc(mem.heapUsed / 1024));
-  const total = u_commas(mem.heapTotal / 1024);
-  const percent = (100 * (mem.heapUsed / mem.heapTotal)).toFixed(2);
-  const remaining = u_commas(Math.trunc((mem.heapTotal - mem.heapUsed) / 1024));
+function m_MemoryReport(unit = 'kb') {
+  const _fmt = x => x.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  let cf;
+  if (unit === 'kb') cf = 1024;
+  if (unit === 'mb') cf = 1024 * 1024;
+  const { heapUsed, heapTotal } = process.memoryUsage();
+  const huse = _fmt(Math.trunc(heapUsed / cf));
+  const htot = _fmt(Math.trunc(heapTotal / cf));
+  const hpct = (100 * (heapUsed / heapTotal)).toFixed(2);
+  const hrem = _fmt(Math.trunc((heapTotal - heapUsed) / cf));
+  const kb2gb = 1024 * 1024 * 1024;
+  const sysTotal = (os.totalmem() / kb2gb).toFixed(2);
+  const sysFree = (os.freemem() / kb2gb).toFixed(2);
+
   const pids = m_GetInstancePIDs();
   return {
-    used,
-    total,
-    percent,
-    remaining,
-    pids
+    unit,
+    heapUsed: huse,
+    heapTotal: htot,
+    heapPercent: hpct,
+    heapBuffer: hrem,
+    pids,
+    sysTotalGB: sysTotal,
+    sysFreeGB: sysFree
   };
 }
 
@@ -255,9 +214,20 @@ function CookieIsValid(req) {
 
 /// PORT POOLING //////////////////////////////////////////////////////////////
 /// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-/// Initialize port pool - port 0 is for the base app
+/** The proxy server runs on port 80, hosting various management routes as well
+ *  as the /graph/<db>/ proxying
+ *
+ *  - Base application port is 3000
+ *  - Base websocket port is 4000
+ *
+ *  Launched NetCreate instances are reserved by m_proxy_pool. The entities
+ *  in m_proxy_pool range from 0...PROCESS_MAX, are stored as offsets from the
+ *  base ports. When an instance is killed through the management UI, the
+ *  port index is returned to the pool. The UI prevents the base app from being
+ *  reallocated.
+ */
 for (let i = 0; i <= PROCESS_MAX; i++) {
-  m_port_pool.push(i);
+  m_proxy_pool.push(i);
 }
 /// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 /** Gets the next available port from the pool.
@@ -268,22 +238,22 @@ for (let i = 0; i <= PROCESS_MAX; i++) {
  *  or `undefined` if no items are left in the pool
  */
 function PickPort() {
-  if (m_port_pool.length < 1) return undefined;
-  const index = m_port_pool.shift();
+  if (m_proxy_pool.length < 1) return undefined;
+  const index = m_proxy_pool.shift();
   const result = {
     index,
     appport: PORT_APP + index,
     netport: PORT_WS + index
   };
   // make sure that there are no duplicates in the pool
-  const dpool = Array.from(new Set(m_port_pool));
-  if (dpool.length !== m_port_pool.length) {
+  const dpool = Array.from(new Set(m_proxy_pool));
+  if (dpool.length !== m_proxy_pool.length) {
     console.log(
       PRE,
       $T(),
       'ERROR: Duplicate port indices in pool! This should not happen!'
     );
-    console.log(PRE, $T(), 'Pool:', m_port_pool);
+    console.log(PRE, $T(), 'Pool:', m_proxy_pool);
   }
   return result;
 }
@@ -292,7 +262,7 @@ function PickPort() {
  *  @param {integer} index - Port index to return to the pool
  */
 function ReleasePort(index) {
-  if (m_port_pool.find(port => port === index)) {
+  if (m_proxy_pool.find(port => port === index)) {
     console.log(
       PRE,
       $T(),
@@ -301,14 +271,14 @@ function ReleasePort(index) {
     );
     // throw 'ERROR: Port already in pool! This should not happen! ' + index;
   }
-  m_port_pool.push(index);
+  m_proxy_pool.push(index);
 }
 /// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 /** Returns true if there are no more port indices left in the pool
  *  Used by /graph/<db>/ route to check if it should spawn a new app
  */
 function PortPoolIsEmpty() {
-  return m_port_pool.length < 1;
+  return m_proxy_pool.length < 1;
 }
 
 /// RENDERERS /////////////////////////////////////////////////////////////////
@@ -476,13 +446,14 @@ function RenderGenerateTokensForm() {
 }
 /// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 function RenderMemoryReport() {
-  const { used, total, percent, remaining, pids } = m_MemoryReport();
-  const mem = process.memoryUsage();
+  const mem = m_MemoryReport();
+  const { unit, heapUsed, heapTotal, heapPercent, heapBuffer, pids } = mem;
+  const { sysTotalGB, sysFreeGB } = mem;
 
   let response = `<p>MEMORY`;
-  response += ` :: Used: ${used}mb / ${total}mb (${percent}%) `;
-  response += ` :: Remaining: ${remaining}mb`;
-  response += ` :: Out of memory: ${OutOfMemory()}</p>`;
+  response += ` :: Used: ${heapUsed}${unit} / ${heapTotal}${unit} (${heapPercent}%) `;
+  response += ` :: Remaining: ${heapBuffer}${unit}`;
+  response += ` :: LowMem: ${OutOfMemory()}</p>`;
   const psOut = m_GetInstancePIDs();
   response += `<pre>DETECTED LAUNCH INSTANCES\n${psOut}</pre>`;
   return response;
@@ -505,14 +476,15 @@ async function SpawnApp(db) {
   }
 }
 /// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-/** UTILITY: Promises a new node NetCreate application process
- * This starts `nc-start.js` via a fork.
- * `nc-start.js` will generate the `netcreate-config.js`
- * configuration file, and then start the brunch server.
+/** UTILITY: Promises a new node NetCreate application process. This forks
+ *  `nc-launch-instance.jssh`.
  *
- * When `nc-start.js` has completed, it sends a message back
- * via fork messaging, at which point this promise is resolved
- * and then we redirect the user to the new port.
+ *  To initiate the launch process, m_PromiseApp() uses process.send to
+ *  supply the parameters necessary to write its netcreate-config.js file
+ *  and start the server using the supplied ports.
+ *
+ *  After the server has launched, the child process sends a message back
+ *  to report success or faiure.
  *
  * @param {string} db - dataset name to use
  * @resolve {object} sends the forked process and meta info
@@ -521,7 +493,7 @@ function m_PromiseApp(db) {
   return new Promise((resolve, reject) => {
     const ports = PickPort();
     if (ports === undefined) {
-      reject(`Unable to find a free port.  ${db} not created.`);
+      reject(`Unable to find a free port. ${db} not created.`);
     }
     const { index, appport, netport } = ports;
     // 1. Define the fork
@@ -534,18 +506,22 @@ function m_PromiseApp(db) {
     //    send a message back to this handler, which in turn
     //    sends the new spec back to SpawnApp
     forked.on('message', msg => {
-      console.log(PRE, $T());
-      console.log(PRE, 'Received message from spawned fork:', msg);
-      console.log(PRE, `instance '${db}' started`);
-      const newProcessDef = {
-        db,
-        port: ports.appport,
-        netport: ports.netport,
-        portindex: ports.index,
-        GOOGLEA: GOOGLEA,
-        process: forked
-      };
-      resolve(newProcessDef); // pass to SpawnApp
+      const { event } = msg;
+      if (event === 'SUCCESS') {
+        console.log(PRE, `${CYN} instance '${db}' running on port ${appport}`, RST);
+        const newProcessDef = {
+          db,
+          port: ports.appport,
+          netport: ports.netport,
+          portindex: ports.index,
+          GOOGLEA: GOOGLEA,
+          process: forked
+        };
+        resolve(newProcessDef); // pass to SpawnApp
+      } else {
+        console.log(PRE, `instance '${db}' failed to start`);
+        reject(`Failed to start instance '${db}'`);
+      }
     });
 
     // 3. Send message to start fork
@@ -562,7 +538,7 @@ function m_PromiseApp(db) {
     };
     console.log(
       PRE,
-      `*** sending port:${ports.appport}, db:${db}, netport:${ports.netport} to forked process`
+      `initializing launch of '${db}' on port:${ports.appport} netport:${ports.netport}`
     );
     forked.send(ncStartParams);
   });
@@ -581,8 +557,8 @@ function AddChildProcess(newProcess) {
  *  This is used to prevent node from starting too many processes.
  */
 function OutOfMemory() {
-  let mem = process.memoryUsage();
-  return mem.heapTotal / 1024 - mem.heapUsed / 1024 < MEMORY_MIN;
+  let free = os.freemem() / 1024; // mb
+  return free < MEMORY_MIN;
 }
 
 /// ROUTER UTILITY FUNCTIONS //////////////////////////////////////////////////
