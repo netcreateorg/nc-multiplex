@@ -1,6 +1,5 @@
 #!/usr/bin/env node
-/**
- *  nc-launch-instance.js
+/** nc-launch-instance.js
  *
  *  This shell script will start NetCreate
  *  brunch server directly, bypassing nc.js
@@ -11,7 +10,7 @@
  *  Generally it is not called directly, but
  *  is called by `nc-multiplex.js`.
  *
- *  It assumes that the app has been built.
+ *  It assumes that the app has been built with npm run package
  *
  */
 

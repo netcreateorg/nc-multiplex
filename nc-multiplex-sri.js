@@ -525,7 +525,7 @@ function m_PromiseApp(db) {
     }
     const { index, appport, netport } = ports;
     // 1. Define the fork
-    const forked = fork('./nc-launch-instance.js', [
+    const forked = fork('./nc-launch-instance.jssh', [
       `${db}:${index}/${appport}/${netport}`
     ]);
 
