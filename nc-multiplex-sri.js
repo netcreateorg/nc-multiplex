@@ -156,7 +156,7 @@ function m_DatabaseIsRunning(db) {
 /// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 /** get the output of ps matching nc-launch-instance.js entries */
 function m_GetInstancePIDs() {
-  const stdout = execSync('ps -ef | grep nc-launch-instance.js');
+  const stdout = execSync('ps -e -o pid -o command | grep nc-launch-instance.js');
   const regex = /(\d+).+\/versions\/node\/(.+)/;
   const lines = stdout.toString().split('\n');
   let out = '';
