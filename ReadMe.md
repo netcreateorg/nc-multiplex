@@ -51,10 +51,10 @@ cd netcreate-itest
 npm ci
 ```
 
-If this is your first run with a newly cloned repo, run Net.Create once to set configuration files.
+If this is your first run with a newly cloned repo, run Net.Create once to set the initial configuration file and build dependent libraries:
 ```
-// cd netcreate-itest/build
-./nc.js --dataset=demo
+cd netcreate-itest
+npm run package
 ```
 
 Check your browser to make sure it's running:
@@ -106,7 +106,7 @@ Or you can:
 #### 6. Start Reverse Proxy Server
 ```
 cd ~/your-dev-folder/nc-multiplex
-node nc-multiplex.js
+./start.sh
 ```
 
 ***IP Address or Google Analytics Code**  
