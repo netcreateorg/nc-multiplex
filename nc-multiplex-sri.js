@@ -76,16 +76,46 @@ const RED = '\x1b[91m'; // red
 /// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 const { strDateStamp, strTimeStamp } = NCLOG;
 const $T = () => `${strDateStamp()} ${strTimeStamp()}`; // return timestamp string
+
+/// HELPER METHODS ////////////////////////////////////////////////////////////
+/// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+/** return memory parameters */
+function m_MemoryReport(unit = 'kb') {
+  const _fmt = x => x.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  let cf;
+  if (unit === 'kb') cf = 1024;
+  if (unit === 'mb') cf = 1024 * 1024;
+  const { heapUsed, heapTotal } = process.memoryUsage();
+  const huse = _fmt(Math.trunc(heapUsed / cf));
+  const htot = _fmt(Math.trunc(heapTotal / cf));
+  const hpct = (100 * (heapUsed / heapTotal)).toFixed(2);
+  const hrem = _fmt(Math.trunc((heapTotal - heapUsed) / cf));
+  const kb2mb = 1024 * 1024;
+  const sysTotal = _fmt(Math.trunc(os.totalmem() / kb2mb));
+  const sysFree = _fmt(Math.trunc(os.freemem() / kb2mb));
+
+  const pids = m_GetInstancePIDs();
+  return {
+    unit,
+    heapUsed: huse,
+    heapTotal: htot,
+    heapPercent: hpct,
+    heapBuffer: hrem,
+    pids,
+    sysTotalMB: sysTotal,
+    sysFreeMB: sysFree
+  };
+}
 /// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 /** periodically log memory usage and running instances to console */
 function m_MemLog() {
-  let { heapUsed, heapTotal, heapPercent, sysFreeGB, unit, pids } = m_MemoryReport();
+  let { heapUsed, heapTotal, heapPercent, sysFreeMB, unit, pids } = m_MemoryReport();
   console.log(
     PRE,
     '* MEMORY HEARTBEAT',
     $T(),
     `- nodeHeap ${heapUsed} / ${heapTotal}${unit} (${heapPercent}%)`,
-    `- freeMem ${sysFreeGB}GB`
+    `- freeMem ${sysFreeMB}mb`
   );
   const out = pids.split('\n');
   if (out.length > 1)
@@ -93,8 +123,6 @@ function m_MemLog() {
       if (line.trim().length > 0) console.log(PRE, '*', line.trim());
     });
 }
-
-/// HELPER METHODS ////////////////////////////////////////////////////////////
 /// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 /** Returns true if the db is currently running as a process
  * @param {string} db - database name
@@ -129,34 +157,6 @@ function m_SendErrorResponse(res, msg) {
     `<p>${msg}</p>
     <p><a href="/manage">Back to Multiplex Manager</a></p>`
   );
-}
-/// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-/** return memory parameters */
-function m_MemoryReport(unit = 'kb') {
-  const _fmt = x => x.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
-  let cf;
-  if (unit === 'kb') cf = 1024;
-  if (unit === 'mb') cf = 1024 * 1024;
-  const { heapUsed, heapTotal } = process.memoryUsage();
-  const huse = _fmt(Math.trunc(heapUsed / cf));
-  const htot = _fmt(Math.trunc(heapTotal / cf));
-  const hpct = (100 * (heapUsed / heapTotal)).toFixed(2);
-  const hrem = _fmt(Math.trunc((heapTotal - heapUsed) / cf));
-  const kb2gb = 1024 * 1024 * 1024;
-  const sysTotal = (os.totalmem() / kb2gb).toFixed(2);
-  const sysFree = (os.freemem() / kb2gb).toFixed(2);
-
-  const pids = m_GetInstancePIDs();
-  return {
-    unit,
-    heapUsed: huse,
-    heapTotal: htot,
-    heapPercent: hpct,
-    heapBuffer: hrem,
-    pids,
-    sysTotalGB: sysTotal,
-    sysFreeGB: sysFree
-  };
 }
 
 /// SESSION OPERATIONS ////////////////////////////////////////////////////////
@@ -509,7 +509,11 @@ function m_PromiseApp(db) {
     forked.on('message', msg => {
       const { event } = msg;
       if (event === 'SUCCESS') {
-        console.log(PRE, `${CYN}launch success: '${db}' running on port ${appport}`, RST);
+        console.log(
+          PRE,
+          `${CYN}launch success: '${db}' running on port ${appport}`,
+          RST
+        );
         const newProcessDef = {
           db,
           port: ports.appport,
@@ -520,7 +524,7 @@ function m_PromiseApp(db) {
         };
         resolve(newProcessDef); // pass to SpawnApp
       } else {
-        console.log(PRE, `${RED}instance '${db}' failed to start`,RST);
+        console.log(PRE, `${RED}instance '${db}' failed to start`, RST);
         reject(`Failed to start instance '${db}'`);
       }
     });
