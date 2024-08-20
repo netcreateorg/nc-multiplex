@@ -51,7 +51,7 @@ async function m_StartServer(port) {
 /// IPC RUNTIME OPERATIONS ////////////////////////////////////////////////////
 /// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 process.on('message', data => {
-  console.log(PRE, CYN, $T(),`LAUNCHING DB '${data.db}'`,RST);
+  console.log(PRE, CYN, $T(),`launching instance for '${data.db}'`,RST);
   m_WriteConfig(data);
   m_StartServer(data.port);
 });

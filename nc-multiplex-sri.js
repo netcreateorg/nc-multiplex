@@ -509,7 +509,7 @@ function m_PromiseApp(db) {
     forked.on('message', msg => {
       const { event } = msg;
       if (event === 'SUCCESS') {
-        console.log(PRE, `${CYN}proxy success: '${db}' running on port ${appport}`, RST);
+        console.log(PRE, `${CYN}launch success: '${db}' running on port ${appport}`, RST);
         const newProcessDef = {
           db,
           port: ports.appport,
