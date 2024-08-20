@@ -1,5 +1,10 @@
 /*///////////////////////////////// ABOUT \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\*\
 
+  NETCREATE MULTIPLEX SERVER - REMIX (2024)
+  Reformatted for debugging by Sri, so new bugs are mine :-)
+
+  --- original comments ---
+
   To start a new graph:
     http://localhost/graph/tacitus/
 
@@ -18,12 +23,10 @@
     node nc-multiplex.js --IP=192.168.1.40
     node nc-multiplex.js --GOOGLEA=xxxxx
 
-
-
 \*\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\ * /////////////////////////////////////*/
 
 const { createProxyMiddleware } = require('http-proxy-middleware');
-const { fork, exec } = require('child_process');
+const { fork, exec, execSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const express = require('express');
@@ -36,58 +39,52 @@ const SESSION = require(`${NC_SERVER_PATH}/app/unisys/common-session.js`);
 const NCUTILS = require('./modules/nc-utils.js');
 const NCLOG = require('./modules/nc-logging-utils');
 
-/// API METHODS ///////////////////////////////////////////////////////////////
-/// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-
-/// EXPORTS ///////////////////////////////////////////////////////////////////
-/// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-
 /*/
 
-PORT SCHEME
+  ## PORT SCHEME
 
-      The proxy server runs on port 80.
+  The proxy server runs on port 80, hosting various management routes as well as
+  the /graph/<db>/ proxying
 
-      Defined in `port_router`
+  - Base application port is 3000
+  - Base websocket port is 4000
 
-      Base application port is 3000
-      Base websocket port is 4000
+  When the app is started, we initialize a pool of ports indices based on the
+  PROCESS_MAX value. 3000 is reserved for the base app, and a check in the /kill
+  route prevents the base app prevents the port from being released
 
-      When the app is started, we initialize a pool of ports
-      indices based on the PROCESS_MAX value.
+  When a process is spawned, we grab from the pool of port indices, then
+  generate new port numbers based on the index, where the app port and the
+  websocket (net) port share the same basic index, e.g.
 
-      When a process is spawned, we grab from the pool of port indices, then generate new port numbers based on the
-      index, where the app port and the websocket (net) port share
-      the same basic index, e.g.
+  {
+    index: 2, appport: 3002, netport: 4002
+  }
 
-      {
-        index: 2,
-        appport: 3002,
-        netport: 4002
-      }
+  When the process is killed, the port index is returned to the pool and
+  re-used.
 
-      When the process is killed, the port index is returned
-      to the pool and re-used.
+  ## netcreate-config.js / NC_CONFIG
 
+  NC_CONFIG is actually used by both the server-side scripts and client-side
+  scripts to set the active database, IP, ports, netports, and google analytics
+  code.
 
-  # netcreate-config.js / NC_CONFIG
+  As such, it is generated twice:
 
-      NC_CONFIG is actually used by both the server-side scripts and
-      client-side scripts to set the active database, IP, ports,
-      netports, and google analytics code.
+  1. server-side: nc-start.js will generate a local file version into
+     /build/app/assets where it is used by brunch-server.js, brunch-config.js,
+     and server-database.js during the app start process.
 
-      As such, it is generated twice:
-      1. server-side: nc-start.js will generate a local file version into /build/app/assets
-         where it is used by brunch-server.js, brunch-config.js, and server-database.js
-         during the app start process.
-      2. client-side: nc-multiplex.js will then dynamically generate netcreate-config.js
-         for each graph's http request.
+  2. client-side: nc-multiplex.js will then dynamically generate
+     netcreate-config.js for each graph's http request.
 
-      REVIEW: There is a potential conflict server-side if two graphs
-      are started up at the same time and the newly generated netcreate-config.js
-      files cross each other.
+  REVIEW: There is a potential conflict server-side if two graphs are started up
+  at the same time and the newly generated netcreate-config.js files cross each
+  other.
 
-      REVIEW: The dynamically generated client-side version should probably be cached.
+  REVIEW: The dynamically generated client-side version should probably be
+  cached.
 
 /*/
 
@@ -131,6 +128,34 @@ const $T = () => `${strDateStamp()} ${strTimeStamp()}`; // return timestamp stri
  */
 function m_DatabaseIsRunning(db) {
   return m_child_processes.find(route => route.db === db);
+}
+/// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+/** get the output of ps matching nc-launch-instance.js entries */
+function m_GetInstancePIDs() {
+  const stdout = execSync('ps | grep nc-launch-instance.js');
+  const regex = /(\d+).+\/versions\/node\/(.+)/;
+  const lines = stdout.toString().split('\n');
+  let out = 'DETECTED NC-LAUNCH INSTANCES\n\n';
+  lines.forEach(line => {
+    if (line.includes('/bin/node ./nc-launch-instance.js')) {
+      const match = line.match(regex);
+      if (match) {
+        const [_, pid, cli] = match;
+        out += `  PID:${pid}   .nvm/versions/${cli}\n`;
+      }
+    }
+  });
+  return out;
+}
+/// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+/** express helper to return an error */
+function m_SendErrorResponse(res, msg) {
+  console.log(PRE, $T(), 'error response:', msg);
+  res.set('Content-Type', 'text/html');
+  res.send(
+    `<p>${msg}</p>
+    <p><a href="/manage">Back to Multiplex Manager</a></p>`
+  );
 }
 
 /// UTILITY METHODS ///////////////////////////////////////////////////////////
@@ -417,6 +442,8 @@ function RenderMemoryReport() {
     Math.trunc((mem.heapTotal - mem.heapUsed) / 1024)
   )}mb`;
   response += ` :: Out of memory: ${OutOfMemory()}</p>`;
+  const psOut = m_GetInstancePIDs();
+  response += `<pre>${psOut}</pre>`;
   return response;
 }
 
@@ -619,17 +646,6 @@ try {
 }
 PASSWORD_HASH = GetHash(PASSWORD);
 
-/// EXPRESS UTILITIES /////////////////////////////////////////////////////////
-/// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-function m_SendErrorResponse(res, msg) {
-  console.log(PRE, $T(), 'error response:', msg);
-  res.set('Content-Type', 'text/html');
-  res.send(
-    `<p>${msg}</p>
-    <p><a href="/manage">Back to Multiplex Manager</a></p>`
-  );
-}
-
 /// EXPRESS STARTUP ///////////////////////////////////////////////////////////
 /// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 // START BASE APP
@@ -642,6 +658,7 @@ SpawnApp('base');
 const app = express();
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
+
 
 /// EXPRESS DATA ACCESS ROUTES ////////////////////////////////////////////////
 /// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
