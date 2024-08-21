@@ -725,6 +725,7 @@ const u_mw_filter = (pathname, req) => {
     console.log(PRE, $T(), 'ERROR: req.params is undefined');
     const fullUrl = req.protocol + '://' + req.get('host') + req.originalUrl;
     console.log(PRE, `error on url: ${fullUrl}`);
+    console.log(PRE, `client ip: ${req.ip}`);
     return false;
   }
   // only match if there is a trailing '/'
@@ -846,7 +847,7 @@ app.get('/maketoken/:clsid/:projid/:dataset/:numgroups', (req, res) => {
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 /// HANDLE "/manage" -- MANAGER PAGE
 app.get('/manage', (req, res) => {
-  console.log(PRE, $T(), 'manage GET on /manage');
+  console.log(PRE, $T(), `manage GET on /manage (client:${req.ip})`);
   if (CookieIsValid(req)) {
     res.set('Content-Type', 'text/html');
     res.send(RenderManager());
@@ -884,7 +885,7 @@ app.post('/authorize', (req, res) => {
 /// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 /// HANDLE "/" -- HOME PAGE
 app.get('/', (req, res) => {
-  console.log(PRE, $T(), 'home page GET on /');
+  console.log(PRE, $T(), `home page GET on / (client:${req.ip})`);
   if (HOMEPAGE_EXISTS) {
     console.log(PRE, '.. sending home.html');
     res.sendFile(path.join(__dirname, 'home.html'));
