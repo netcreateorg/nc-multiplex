@@ -688,14 +688,6 @@ const app = express();
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 
-/// EXPRESS DEBUGGING ROUTES //////////////////////////////////////////////////
-/// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-app.get(`/crash`, (req, res) => {
-  console.log(PRE, $T(), 'crash route hit');
-  res.send('crashing');
-  process.exit(1);
-});
-
 /// EXPRESS DATA ACCESS ROUTES ////////////////////////////////////////////////
 /// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 /** HANDLE /graph/:graph/netcreate-config.js
