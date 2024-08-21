@@ -72,6 +72,7 @@ const CYN = '\x1b[96m'; // cyan
 const CYNR = '\x1b[46m'; // reversed cyan
 const RST = '\x1b[0m'; // reset
 const RED = '\x1b[91m'; // red
+const WARN = '\x1b[93m'; // yellow
 
 /// SRI HACK IN TIMESTAMP /////////////////////////////////////////////////////
 /// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -577,7 +578,7 @@ function OutOfMemory() {
  *  c) if no more ports are available, redirect back to the root.
  */
 async function RouterGraph(req) {
-  if (req.params===undefined) {
+  if (req.params === undefined) {
     console.log(PRE, $T(), 'ERROR in RouterGraph: req.params is undefined');
     console.log(PRE, $T(), 'req.ip:', req.ip);
   }
@@ -594,7 +595,11 @@ async function RouterGraph(req) {
   let route = m_child_processes.find(route => route.db === db);
   if (route) {
     // a) Yes. Use existing route!
-    console.log(PRE, $T(), `>>> proxying /graph/${route.db}:80 to :${route.port} (client ${req.ip})`);
+    console.log(
+      PRE,
+      $T(),
+      `>>> proxying /graph/${route.db}:80 to :${route.port} (client ${req.ip})`
+    );
     port = route.port;
   } else if (PortPoolIsEmpty()) {
     // b) No more ports available.
@@ -612,7 +617,11 @@ async function RouterGraph(req) {
     port = await SpawnApp(db);
   } else {
     // c) Not defined or running, and not allowed to spawn
-    console.log(PRE, $T(), `!!! /graph/${db} not allowed to spawn (AUTO_NEW=ALOW_SPAWN=false)`);
+    console.log(
+      PRE,
+      $T(),
+      `!!! /graph/${db} not allowed to spawn (AUTO_NEW=ALOW_SPAWN=false)`
+    );
     path = `/error_no_database?graph=${db}`;
   }
   return {
@@ -721,13 +730,27 @@ app.get(`/graph/:graph/${NC_URL_CONFIG}`, (req, res) => {
  *  to localhost:3000/filename (e.g. `netcreate-config.js` requests).
  *  If there's a missing trailing "/", the redirects to
  */
-const u_mw_filter = (pathname, req) => {
+const m_GraphFilter = (route, req) => {
   // sri debug detect if req.params is undefined
+  if (req === undefined) {
+    console.log(PRE, $T(), `??? USE ${route} req is undefined`);
+    return false;
+  }
+  // detect if this is a websocket connection
+  if (req.headers && req.headers.upgrade) {
+    const { upgrade } = req.headers;
+    if (typeof upgrade === 'string' && upgrade.toLowerCase() === 'websocket') {
+      const ip = req.headers['x-forwarded-for'] || req.connection.remoteAddress;
+      console.log(
+        PRE,
+        $T(),
+        `${WARN}??? USE ${route} is a websocket connection attempt from ${ip}`,
+        RST
+      );
+    }
+  }
   if (req.params === undefined) {
-    console.log(PRE, $T(), 'ERROR: /graph/:graph/:file? req.params is undefined');
-    const fullUrl = req.protocol + '://' + req.get('host') + req.originalUrl;
-    console.log(PRE, `error url: ${fullUrl}`);
-    console.log(PRE, `client ip: ${req.ip}`);
+    console.log(PRE, $T(), `${WARN}??? USE ${route} req.params is undefined`, RST);
     return false;
   }
   // only match if there is a trailing '/'
@@ -737,7 +760,7 @@ const u_mw_filter = (pathname, req) => {
 };
 app.use(
   '/graph/:graph/:file?',
-  createProxyMiddleware(u_mw_filter, {
+  createProxyMiddleware(m_GraphFilter, {
     // this is the actual proxy setup object
     router: RouterGraph,
     pathRewrite: function (path, req) {
@@ -747,10 +770,14 @@ app.use(
     },
     target: `http://localhost:3000`, // default fallback, router takes precedence
     ws: true,
-    changeOrigin: true,
-    logLevel: 'silent'
+    changeOrigin: true
+    // logLevel: 'silent'
   })
 );
+
+process.on('unhandledException', err => {
+  console.error(PRE, $T(), 'unhandledException:', err);
+});
 
 /// EXPRESS ERROR ROUTES //////////////////////////////////////////////////////
 /// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -785,7 +812,7 @@ app.get('/graph/:file', (req, res) => {
 /// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 // HANDLE "/kill/:graph" -- KILL REQUEST
 app.get('/kill/:graph/', (req, res) => {
-  if (req.params ===undefined) {
+  if (req.params === undefined) {
     console.log(PRE, $T(), 'ERROR: req.params is undefined for /kill/:graph/');
     const fullUrl = req.protocol + '://' + req.get('host') + req.originalUrl;
     console.log(PRE, `error url: ${fullUrl}`);

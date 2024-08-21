@@ -2,10 +2,8 @@
 
 /*///////////////////////////////// ABOUT \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\*\
 
-  Dumps the PIDs of all running instances of nc-launch-instance.js
-
-  To run:
-    node ./dump-pids.js
+  Example Code
+  Dumps a memory and process report for the current node.js process.
 
 \*\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\ * /////////////////////////////////////*/
 
