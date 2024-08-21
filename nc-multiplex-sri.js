@@ -760,12 +760,13 @@ app.use(
 /// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 /// HANDLE NO DATABASE -- RETURN ERROR
 app.get('/error_no_database', (req, res) => {
-  // get the db name from the query string
+  // get the ?graph value the query string
   let db = '';
   if (req.query && req.query.graph) db = req.query.graph;
+  // overblown pretty-print formating
   if (db.endsWith('/')) db = db.slice(0, -1);
-  db = `'${db}'`;
-  m_SendErrorResponse(res, `Requested graph ${db} is not currently open.`);
+  db = db.length > 0 ? ` '${db}' ` : ' ';
+  m_SendErrorResponse(res, `Requested graph${db}is not currently open.`);
 });
 /// HANDLE NOT AUTHORIZED -- RETURN ERROR
 app.get('/error_not_authorized', (req, res) => {
