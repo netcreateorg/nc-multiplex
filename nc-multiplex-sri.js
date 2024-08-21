@@ -69,6 +69,7 @@ let PASSWORD_HASH; // Hash generated from password
 let m_child_processes = []; // array of forked process + meta info = { db, port, netport, portindex, process };
 /// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 const CYN = '\x1b[96m'; // cyan
+const CYNR = '\x1b[46m'; // reversed cyan
 const RST = '\x1b[0m'; // reset
 const RED = '\x1b[91m'; // red
 
@@ -499,10 +500,8 @@ function m_PromiseApp(db) {
     }
     const { index, appport, netport } = ports;
     // 1. Define the fork
-    const forked = fork('./nc-launch-instance.jssh', [
-      `${db}:${index}/${appport}/${netport}`
-    ]);
-
+    const info = `${db}:${index}/${appport}/${netport}`; // ignored by launcher
+    const forked = fork('./nc-launch-instance.jssh', [info]);
     // 2. Define fork success handler
     //    When the child node process is up and running, it will
     //    send a message back to this handler, which in turn
@@ -512,7 +511,8 @@ function m_PromiseApp(db) {
       if (event === 'SUCCESS') {
         console.log(
           PRE,
-          `${CYN}launch success: '${db}' running on port ${appport}`,
+          $T(),
+          `${CYN}instance confirmed '${db}' has launched (port ${appport})`,
           RST
         );
         const newProcessDef = {
@@ -569,9 +569,8 @@ function OutOfMemory() {
 
 /// ROUTER UTILITY FUNCTIONS //////////////////////////////////////////////////
 /// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-/** RouterGraph
- *  @param {object} req
- *
+/** RouterGraph used by http-proxy-middleware to route to the correct port
+ *  @param {Express.Request} req
  *  The router function tries to route to the correct port by:
  *  a) if process is already running, use existing port
  *  b) if the process isn't running, spawn a new process
@@ -604,23 +603,20 @@ async function RouterGraph(req) {
     path = `/error_out_of_memory`;
   } else if (AUTO_NEW || ALLOW_SPAWN) {
     // c) Not defined yet, Create a new one.
-    console.log(PRE, $T(), '.. not running yet, starting new', db);
+    let reason = ALLOW_SPAWN ? 'spawn=true ' : 'spawn=false ';
+    reason += AUTO_NEW ? 'new=true' : 'new=false';
+    console.log(PRE, $T(), `.. auto spawning (${reason})`, db);
     port = await SpawnApp(db);
   } else {
-    // c) Not defined yet.  Report error.
-    console.log(
-      PRE,
-      $T(),
-      '.. not running yet, AUTO_NEW is false so no db for you',
-      db
-    );
-    path = `/error_no_database`;
+    // c) Not defined or running, and not allowed to spawn
+    console.log(PRE, $T(), '.. not running (AUTO_NEW and ALLOW_SPAWN false)', db);
+    path = `/error_no_database?graph=${db}`;
   }
   return {
     protocol: 'http:',
     host: 'localhost',
     port: port,
-    path: path
+    path: path // if path is empty, it will be ignored
   };
 }
 
@@ -692,6 +688,14 @@ const app = express();
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 
+/// EXPRESS DEBUGGING ROUTES //////////////////////////////////////////////////
+/// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+app.get(`/crash`, (req, res) => {
+  console.log(PRE, $T(), 'crash route hit');
+  res.send('crashing');
+  process.exit(1);
+});
+
 /// EXPRESS DATA ACCESS ROUTES ////////////////////////////////////////////////
 /// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 /** HANDLE /graph/:graph/netcreate-config.js
@@ -719,38 +723,49 @@ app.get(`/graph/:graph/${NC_URL_CONFIG}`, (req, res) => {
   res.send(response);
 });
 /** HANDLE /graph/:graph/:file?
- *  :file is optional.  It catches db-specific file requests,
- *  for example, the`netcreate-config.js` request.
- *  If there's a missing trailing "/", the URL is malformed
+ *  The intention is to proxy file requests from /graph/dbname/filename
+ *  to localhost:3000/filename (e.g. `netcreate-config.js` requests).
+ *  If there's a missing trailing "/", the redirects to
  */
+const u_mw_filter = (pathname, req) => {
+  // sri debug detect if req.params is undefined
+  if (req.params === undefined) {
+    console.log(PRE, $T(), 'ERROR: req.params is undefined');
+    const fullUrl = req.protocol + '://' + req.get('host') + req.originalUrl;
+    console.log(PRE, `error on url: ${fullUrl}`);
+    return false;
+  }
+  // only match if there is a trailing '/'
+  if (req.params.file) return true; // legit file
+  if (req.params.graph && req.originalUrl.endsWith('/')) return true; // legit graph
+  return false;
+};
 app.use(
   '/graph/:graph/:file?',
-  createProxyMiddleware(
-    (pathname, req) => {
-      // only match if there is a trailing '/'
-      if (req.params.file) return true; // legit file
-      if (req.params.graph && req.originalUrl.endsWith('/')) return true; // legit graph
-      return false;
+  createProxyMiddleware(u_mw_filter, {
+    // this is the actual proxy setup object
+    router: RouterGraph,
+    pathRewrite: function (path, req) {
+      // remove '/graph/db/' for the rerouted calls
+      // e.g. localhost/graph/hawaii/#/edit/mop => localhost:3000/#/edit/mop
+      return (rewrite = path.replace(`/graph/${req.params.graph}`, ''));
     },
-    {
-      router: RouterGraph,
-      pathRewrite: function (path, req) {
-        // remove '/graph/db/' for the rerouted calls
-        // e.g. localhost/graph/hawaii/#/edit/mop => localhost:3000/#/edit/mop
-        return (rewrite = path.replace(`/graph/${req.params.graph}`, ''));
-      },
-      target: `http://localhost:3000`, // default fallback, router takes precedence
-      ws: true,
-      changeOrigin: true
-    }
-  )
+    target: `http://localhost:3000`, // default fallback, router takes precedence
+    ws: true,
+    changeOrigin: true
+  })
 );
 
 /// EXPRESS ERROR ROUTES //////////////////////////////////////////////////////
 /// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 /// HANDLE NO DATABASE -- RETURN ERROR
 app.get('/error_no_database', (req, res) => {
-  m_SendErrorResponse(res, 'This graph is not currently open.');
+  // get the db name from the query string
+  let db = '';
+  if (req.query && req.query.graph) db = req.query.graph;
+  if (db.endsWith('/')) db = db.slice(0, -1);
+  db = `'${db}'`;
+  m_SendErrorResponse(res, `Requested graph ${db} is not currently open.`);
 });
 /// HANDLE NOT AUTHORIZED -- RETURN ERROR
 app.get('/error_not_authorized', (req, res) => {
