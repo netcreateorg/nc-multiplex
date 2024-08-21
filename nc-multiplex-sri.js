@@ -752,7 +752,8 @@ app.use(
     },
     target: `http://localhost:3000`, // default fallback, router takes precedence
     ws: true,
-    changeOrigin: true
+    changeOrigin: true,
+    logLevel: 'silent'
   })
 );
 
