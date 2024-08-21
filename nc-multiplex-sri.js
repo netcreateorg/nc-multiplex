@@ -153,7 +153,6 @@ function m_GetInstancePIDs() {
 /// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 /** express helper to return an error */
 function m_SendErrorResponse(res, msg) {
-  console.log(PRE, $T(), 'error response:', msg);
   res.set('Content-Type', 'text/html');
   res.send(
     `<p>${msg}</p>
@@ -578,6 +577,10 @@ function OutOfMemory() {
  *  c) if no more ports are available, redirect back to the root.
  */
 async function RouterGraph(req) {
+  if (req.params===undefined) {
+    console.log(PRE, $T(), 'ERROR in RouterGraph: req.params is undefined');
+    console.log(PRE, $T(), 'req.ip:', req.ip);
+  }
   const db = req.params.graph;
   let port;
   let path = '';
@@ -591,25 +594,25 @@ async function RouterGraph(req) {
   let route = m_child_processes.find(route => route.db === db);
   if (route) {
     // a) Yes. Use existing route!
-    console.log(PRE, $T(), `.. proxying /graph/${route.db}:80 to :${route.port}`);
+    console.log(PRE, $T(), `>>> proxying /graph/${route.db}:80 to :${route.port} (client:${req.ip})`);
     port = route.port;
   } else if (PortPoolIsEmpty()) {
     // b) No more ports available.
-    console.log(PRE, $T(), '.. No more ports.  Not spawning', db);
+    console.log(PRE, $T(), '!!! no more ports. Not spawning', db);
     path = `/error_out_of_ports`;
   } else if (OutOfMemory()) {
     // c) Not enough memory to spawn new node instance
-    console.log(PRE, $T(), '.. Out of memory.  Not spawning', db);
+    console.log(PRE, $T(), '!!! out of memory. Not spawning', db);
     path = `/error_out_of_memory`;
   } else if (AUTO_NEW || ALLOW_SPAWN) {
     // c) Not defined yet, Create a new one.
     let reason = ALLOW_SPAWN ? 'spawn=true ' : 'spawn=false ';
     reason += AUTO_NEW ? 'new=true' : 'new=false';
-    console.log(PRE, $T(), `.. auto spawning (${reason})`, db);
+    console.log(PRE, $T(), `*** auto spawning (${reason})`, db);
     port = await SpawnApp(db);
   } else {
     // c) Not defined or running, and not allowed to spawn
-    console.log(PRE, $T(), '.. not running (AUTO_NEW and ALLOW_SPAWN false)', db);
+    console.log(PRE, $T(), `!!! /graph/${db} not allowed to spawn (AUTO_NEW=ALOW_SPAWN=false)`);
     path = `/error_no_database?graph=${db}`;
   }
   return {
@@ -703,8 +706,7 @@ app.get(`/graph/:graph/${NC_URL_CONFIG}`, (req, res) => {
     console.log(
       PRE,
       $T(),
-      'returning graph-specific netcreate-config.js for',
-      child.db
+      `GET /graph/${child.db}/${NC_URL_CONFIG} (client:${req.ip})`
     );
     response += NCUTILS.GetNCConfig(child);
   } else {
@@ -722,9 +724,9 @@ app.get(`/graph/:graph/${NC_URL_CONFIG}`, (req, res) => {
 const u_mw_filter = (pathname, req) => {
   // sri debug detect if req.params is undefined
   if (req.params === undefined) {
-    console.log(PRE, $T(), 'ERROR: req.params is undefined');
+    console.log(PRE, $T(), 'ERROR: /graph/:graph/:file? req.params is undefined');
     const fullUrl = req.protocol + '://' + req.get('host') + req.originalUrl;
-    console.log(PRE, `error on url: ${fullUrl}`);
+    console.log(PRE, `error url: ${fullUrl}`);
     console.log(PRE, `client ip: ${req.ip}`);
     return false;
   }
@@ -760,7 +762,7 @@ app.get('/error_no_database', (req, res) => {
   // overblown pretty-print formating
   if (db.endsWith('/')) db = db.slice(0, -1);
   db = db.length > 0 ? ` '${db}' ` : ' ';
-  m_SendErrorResponse(res, `Requested graph${db}is not currently open.`);
+  m_SendErrorResponse(res, `Requested graph${db}is not currently open`);
 });
 /// HANDLE NOT AUTHORIZED -- RETURN ERROR
 app.get('/error_not_authorized', (req, res) => {
@@ -783,8 +785,15 @@ app.get('/graph/:file', (req, res) => {
 /// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 // HANDLE "/kill/:graph" -- KILL REQUEST
 app.get('/kill/:graph/', (req, res) => {
-  console.log(PRE, $T(), 'kill GET on /kill/:graph', req.params.graph);
-  const db = req.params.graph;
+  if (req.params ===undefined) {
+    console.log(PRE, $T(), 'ERROR: req.params is undefined for /kill/:graph/');
+    const fullUrl = req.protocol + '://' + req.get('host') + req.originalUrl;
+    console.log(PRE, `error url: ${fullUrl}`);
+    console.log(PRE, `client ip: ${req.ip}`);
+    return;
+  }
+  const db = req.params ? req.params.graph : '';
+  console.log(PRE, $T(), `GET /kill/${db} (client:${req.ip})`);
   res.set('Content-Type', 'text/html');
   let response = `<h1>NetCreate Manager</h1>`;
   const child = m_child_processes.find(child => child.db === db);
@@ -827,27 +836,25 @@ app.get('/maketoken/:clsid/:projid/:dataset/:numgroups', (req, res) => {
 });
 
 /// EXPRESS MANAGEMENT ROUTES //////////////////////////////////////////////////
-/// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-/*/ Authentication
+/* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - *\
+  Authentication uses a cookie with a hashed password.
+  The cookie expires after AUTH_MINUTES
 
-    Authentication uses a cookie with a hashed password.
-    The cookie expires after AUTH_MINUTES
-
-    1. /manage initially redirects to /login
-    2. On the /login form, the administrator enters a password
-    3. /login POSTS to /authorize
-    4. /authorize checks the password against the PASSWORD
-       If there's no match, the user is redirected to /error_not_authorized
-    5. /authorize then sets a cookie with the PASSWORD_HASH and
-      the user is redirected to /manage
-    6. /manage checks the cookie against the PASSWORD_HASH
-      If the cookie matches, the manage page is displayed
-      If the cookie doesn't match, the user is redirected back to /login
-    7. The cookie expires after AUTH_MINUTES
+  1. /manage initially redirects to /login
+  2. On the /login form, the administrator enters a password
+  3. /login POSTS to /authorize
+  4. /authorize checks the password against the PASSWORD
+      If there's no match, the user is redirected to /error_not_authorized
+  5. /authorize then sets a cookie with the PASSWORD_HASH and
+    the user is redirected to /manage
+  6. /manage checks the cookie against the PASSWORD_HASH
+    If the cookie matches, the manage page is displayed
+    If the cookie doesn't match, the user is redirected back to /login
+  7. The cookie expires after AUTH_MINUTES
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
-/// HANDLE "/manage" -- MANAGER PAGE
+/// HANDLE MANAGER PAGE
 app.get('/manage', (req, res) => {
-  console.log(PRE, $T(), `manage GET on /manage (client:${req.ip})`);
+  console.log(PRE, $T(), `GET /manage (client:${req.ip})`);
   if (CookieIsValid(req)) {
     res.set('Content-Type', 'text/html');
     res.send(RenderManager());
@@ -857,7 +864,7 @@ app.get('/manage', (req, res) => {
 });
 /// 2. redirected from /manage
 app.get('/login', (req, res) => {
-  console.log(PRE, $T(), 'login GET on /login');
+  console.log(PRE, $T(), `GET /login (client:${req.ip})`);
   if (CookieIsValid(req)) {
     // Cookie already set, no need to log in, redirect to manage
     res.redirect(`/manage`);
@@ -869,7 +876,7 @@ app.get('/login', (req, res) => {
 });
 /// 3. post from Login Form
 app.post('/authorize', (req, res) => {
-  console.log(PRE, $T(), 'authorization POST on /authorize');
+  console.log(PRE, $T(), `POST /authorize (client:${req.ip})`);
   let str = new String(req.body.password);
   if (req.body.password === PASSWORD) {
     res.cookie('nc-multiplex-auth', PASSWORD_HASH, {
@@ -885,7 +892,7 @@ app.post('/authorize', (req, res) => {
 /// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 /// HANDLE "/" -- HOME PAGE
 app.get('/', (req, res) => {
-  console.log(PRE, $T(), `home page GET on / (client:${req.ip})`);
+  console.log(PRE, $T(), `GET / (client:${req.ip})`);
   if (HOMEPAGE_EXISTS) {
     console.log(PRE, '.. sending home.html');
     res.sendFile(path.join(__dirname, 'home.html'));
