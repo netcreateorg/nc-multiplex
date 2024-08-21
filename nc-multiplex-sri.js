@@ -594,7 +594,7 @@ async function RouterGraph(req) {
   let route = m_child_processes.find(route => route.db === db);
   if (route) {
     // a) Yes. Use existing route!
-    console.log(PRE, $T(), `>>> proxying /graph/${route.db}:80 to :${route.port} (client:${req.ip})`);
+    console.log(PRE, $T(), `>>> proxying /graph/${route.db}:80 to :${route.port} (client ${req.ip})`);
     port = route.port;
   } else if (PortPoolIsEmpty()) {
     // b) No more ports available.
@@ -706,7 +706,7 @@ app.get(`/graph/:graph/${NC_URL_CONFIG}`, (req, res) => {
     console.log(
       PRE,
       $T(),
-      `GET /graph/${child.db}/${NC_URL_CONFIG} (client:${req.ip})`
+      `GET /graph/${child.db}/${NC_URL_CONFIG} (client ${req.ip})`
     );
     response += NCUTILS.GetNCConfig(child);
   } else {
@@ -793,7 +793,7 @@ app.get('/kill/:graph/', (req, res) => {
     return;
   }
   const db = req.params ? req.params.graph : '';
-  console.log(PRE, $T(), `GET /kill/${db} (client:${req.ip})`);
+  console.log(PRE, $T(), `GET /kill/${db} (client ${req.ip})`);
   res.set('Content-Type', 'text/html');
   let response = `<h1>NetCreate Manager</h1>`;
   const child = m_child_processes.find(child => child.db === db);
@@ -854,7 +854,7 @@ app.get('/maketoken/:clsid/:projid/:dataset/:numgroups', (req, res) => {
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 /// HANDLE MANAGER PAGE
 app.get('/manage', (req, res) => {
-  console.log(PRE, $T(), `GET /manage (client:${req.ip})`);
+  console.log(PRE, $T(), `GET /manage (client ${req.ip})`);
   if (CookieIsValid(req)) {
     res.set('Content-Type', 'text/html');
     res.send(RenderManager());
@@ -864,7 +864,7 @@ app.get('/manage', (req, res) => {
 });
 /// 2. redirected from /manage
 app.get('/login', (req, res) => {
-  console.log(PRE, $T(), `GET /login (client:${req.ip})`);
+  console.log(PRE, $T(), `GET /login (client ${req.ip})`);
   if (CookieIsValid(req)) {
     // Cookie already set, no need to log in, redirect to manage
     res.redirect(`/manage`);
@@ -876,7 +876,7 @@ app.get('/login', (req, res) => {
 });
 /// 3. post from Login Form
 app.post('/authorize', (req, res) => {
-  console.log(PRE, $T(), `POST /authorize (client:${req.ip})`);
+  console.log(PRE, $T(), `POST /authorize (client ${req.ip})`);
   let str = new String(req.body.password);
   if (req.body.password === PASSWORD) {
     res.cookie('nc-multiplex-auth', PASSWORD_HASH, {
@@ -892,7 +892,7 @@ app.post('/authorize', (req, res) => {
 /// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 /// HANDLE "/" -- HOME PAGE
 app.get('/', (req, res) => {
-  console.log(PRE, $T(), `GET / (client:${req.ip})`);
+  console.log(PRE, $T(), `GET / (client ${req.ip})`);
   if (HOMEPAGE_EXISTS) {
     console.log(PRE, '.. sending home.html');
     res.sendFile(path.join(__dirname, 'home.html'));
