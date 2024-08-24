@@ -61,12 +61,13 @@ let NVMRC;
 const argv = require('minimist')(process.argv.slice(2));
 const GOOGLEA = argv['googlea'];
 const IP = argv['ip'];
+/// local data structures
 const m_proxy_pool = []; // array of available port indices, usu [1...100]
+let m_child_processes = []; // array of forked process + meta info = { db, port, netport, portindex, process };
 /// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 let HOMEPAGE_EXISTS; // Flag for existence of home.html override
 let PASSWORD; // Either default password or password in `SESAME` file
 let PASSWORD_HASH; // Hash generated from password
-let m_child_processes = []; // array of forked process + meta info = { db, port, netport, portindex, process };
 /// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 const CYN = '\x1b[96m'; // cyan
 const CYNR = '\x1b[46m'; // reversed cyan
@@ -567,71 +568,6 @@ function OutOfMemory() {
   return free < MEMORY_MIN;
 }
 
-/// ROUTER UTILITY FUNCTIONS //////////////////////////////////////////////////
-/// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-/** RouterGraph used by http-proxy-middleware to route to the correct port
- *  @param {Express.Request} req
- *  The router function tries to route to the correct port by:
- *  a) if process is already running, use existing port
- *  b) if the process isn't running, spawn a new process
- *     and pass the port
- *  c) if no more ports are available, redirect back to the root.
- */
-async function RouterGraph(req) {
-  if (req.params === undefined) {
-    console.log(PRE, $T(), 'ERROR in RouterGraph: req.params is undefined');
-    console.log(PRE, $T(), 'req.ip:', req.ip);
-  }
-  const db = req.params.graph;
-  let port;
-  let path = '';
-
-  // Authenticate to allow spawning
-  let ALLOW_SPAWN = false;
-  if (CookieIsValid(req)) {
-    ALLOW_SPAWN = true;
-  }
-  // Is it already running?
-  let route = m_child_processes.find(route => route.db === db);
-  if (route) {
-    // a) Yes. Use existing route!
-    console.log(
-      PRE,
-      $T(),
-      `>>> proxying /graph/${route.db}:80 to :${route.port} (client ${req.ip})`
-    );
-    port = route.port;
-  } else if (PortPoolIsEmpty()) {
-    // b) No more ports available.
-    console.log(PRE, $T(), '!!! no more ports. Not spawning', db);
-    path = `/error_out_of_ports`;
-  } else if (OutOfMemory()) {
-    // c) Not enough memory to spawn new node instance
-    console.log(PRE, $T(), '!!! out of memory. Not spawning', db);
-    path = `/error_out_of_memory`;
-  } else if (AUTO_NEW || ALLOW_SPAWN) {
-    // c) Not defined yet, Create a new one.
-    let reason = ALLOW_SPAWN ? 'spawn=true ' : 'spawn=false ';
-    reason += AUTO_NEW ? 'new=true' : 'new=false';
-    console.log(PRE, $T(), `*** auto spawning (${reason})`, db);
-    port = await SpawnApp(db);
-  } else {
-    // c) Not defined or running, and not allowed to spawn
-    console.log(
-      PRE,
-      $T(),
-      `!!! /graph/${db} not allowed to spawn (AUTO_NEW=ALOW_SPAWN=false)`
-    );
-    path = `/error_no_database?graph=${db}`;
-  }
-  return {
-    protocol: 'http:',
-    host: 'localhost',
-    port: port,
-    path: path // if path is empty, it will be ignored
-  };
-}
-
 /// RUNTIME: START LOGGING OUTPUT /////////////////////////////////////////////
 /// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 console.log(`\n\n\n`);
@@ -725,12 +661,79 @@ app.get(`/graph/:graph/${NC_URL_CONFIG}`, (req, res) => {
   res.set('Content-Type', 'application/javascript');
   res.send(response);
 });
-/** HANDLE /graph/:graph/:file?
- *  The intention is to proxy file requests from /graph/dbname/filename
- *  to localhost:3000/filename (e.g. `netcreate-config.js` requests).
- *  If there's a missing trailing "/", the redirects to
+
+
+/// PROXY GRAPH REDIRECT //////////////////////////////////////////////////////
+/// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+/** CONFIG FUNCTION: m_RouterLogic used by http-proxy-middleware to route to
+ *  the correct port
+ *  @param {Express.Request} req The router function tries to route to the
+ *  correct port and path, checking whether it already exists. If flags allow,
+ *  it will spawn a new process if able to.
  */
-const m_GraphFilter = (route, req) => {
+async function m_RouterLogic(req) {
+  if (req.params === undefined) {
+    console.log(PRE, $T(), 'ERROR in m_RouterLogic: req.params is undefined');
+    console.log(PRE, $T(), 'req.ip:', req.ip);
+  }
+  const db = req.params.graph;
+  let port;
+  let path = '';
+
+  // Authenticate to allow spawning
+  let ALLOW_SPAWN = false;
+  if (CookieIsValid(req)) {
+    ALLOW_SPAWN = true;
+  }
+  // Is it already running?
+  let route = m_child_processes.find(route => route.db === db);
+  if (route) {
+    // a) Yes. Use existing route!
+    console.log(
+      PRE,
+      $T(),
+      `>>> proxying request /graph/${route.db}:80 to :${route.port} (client ${req.ip})`
+    );
+    port = route.port;
+  } else if (PortPoolIsEmpty()) {
+    // b) No more ports available.
+    console.log(PRE, $T(), '!!! no more ports. Not spawning', db);
+    path = `/error_out_of_ports`;
+  } else if (OutOfMemory()) {
+    // c) Not enough memory to spawn new node instance
+    console.log(PRE, $T(), '!!! out of memory. Not spawning', db);
+    path = `/error_out_of_memory`;
+  } else if (AUTO_NEW || ALLOW_SPAWN) {
+    // c) Not defined yet, Create a new one.
+    let reason = ALLOW_SPAWN ? 'spawn=true ' : 'spawn=false ';
+    reason += AUTO_NEW ? 'new=true' : 'new=false';
+    console.log(PRE, $T(), `*** auto spawning (${reason})`, db);
+    port = await SpawnApp(db);
+  } else {
+    // c) Not defined or running, and not allowed to spawn
+    console.log(
+      PRE,
+      $T(),
+      `!!! /graph/${db} not allowed to spawn (AUTO_NEW=ALOW_SPAWN=false)`
+    );
+    path = `/error_no_database?graph=${db}`;
+  }
+  return {
+    protocol: 'http:',
+    host: 'localhost',
+    port: port,
+    path: path // if path is empty, it will be ignored
+  };
+}
+/// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+/** CONFIG FUNCTION: m_ProxyFilter nominally rewrites the /graph/{db} to
+ *  localhost:{port}, but it also contains some debug code to detect if
+ *  req.params is undefined as we have seen this on our servers and are trying
+ *  to log the conditions when this happens.
+ *  @param {string} rpath - route to check (remainder after any params)
+ *  @param {Express.Request} req - request object
+ */
+function m_ProxyFilter(rpath, req) {
   // sri debug detect if req.params is undefined
   if (req === undefined) {
     console.log(PRE, $T(), `??? USE ${route} req is undefined`);
@@ -744,40 +747,75 @@ const m_GraphFilter = (route, req) => {
       console.log(
         PRE,
         $T(),
-        `${WARN}??? USE ${route} is a websocket connection attempt from ${ip}`,
+        `${WARN}??? USE ${rpath} is a websocket connection attempt from ${ip}`,
         RST
       );
     }
   }
   if (req.params === undefined) {
-    console.log(PRE, $T(), `${WARN}??? USE ${route} req.params is undefined`, RST);
+    console.log(PRE, $T(), `${WARN}??? USE ${rpath} req.params is undefined`, RST);
     return false;
   }
-  // only match if there is a trailing '/'
-  if (req.params.file) return true; // legit file
+  // pass if there is a file
+  // (srinote: this param only contains the first segment, which may be a bug)
+  if (req.params.file) return true; // only first segment of path (bug?)
+  // pass if there is a trailing '/'
   if (req.params.graph && req.originalUrl.endsWith('/')) return true; // legit graph
   return false;
-};
-app.use(
-  '/graph/:graph/:file?',
-  createProxyMiddleware(m_GraphFilter, {
-    // this is the actual proxy setup object
-    router: RouterGraph,
-    pathRewrite: function (path, req) {
-      // remove '/graph/db/' for the rerouted calls
-      // e.g. localhost/graph/hawaii/#/edit/mop => localhost:3000/#/edit/mop
-      return (rewrite = path.replace(`/graph/${req.params.graph}`, ''));
-    },
-    target: `http://localhost:3000`, // default fallback, router takes precedence
-    ws: true,
-    changeOrigin: true
-    // logLevel: 'silent'
-  })
-);
+}
+/// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+/** CONFIG FUNCTION: m_ProxyRewrite rewrites the path to remove the /graph/db/
+ *  prefix, used to reroute the calls to the correct port in the main proxy
+ *  middleware for /graph/dbname/ requests.
+ */
+function m_ProxyRewrite(rpath, req) {
+  // remove '/graph/db/' for the rerouted calls
+  // e.g. localhost/graph/hawaii/#/edit/mop => localhost:3000/#/edit/mop
 
-process.on('unhandledException', err => {
-  console.error(PRE, $T(), 'unhandledException:', err);
+  const fullPath = req.originalUrl;
+  if (req.originalUrl===undefined) {
+    console.log(PRE, $T(), '??? ProxyRewrite req.originalUrl is undefined');
+    return rpath;
+  }
+
+  /*/ srinote: in hpm 3, path is the remainder after the /graph/db/ prefix
+      instead of the full path as before, so use req.originalUrl instead
+  /*/
+
+  // const rewrite = rpath.replace(`/graph/${req.params.graph}`, '');
+  const rewrite = fullPath.replace(`/graph/${req.params.graph}/`, '/');
+  return rewrite;
+}
+/// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+/** MAIN HANDLER /graph/:graph/:file?
+ *  The intention is to proxy file requests from /graph/dbname/filename
+ *  to localhost:3000/filename (e.g. `netcreate-config.js` requests).
+ */
+const proxy = createProxyMiddleware({
+  // this is the actual proxy setup object
+  router: m_RouterLogic,
+  pathFilter: m_ProxyFilter,
+  pathRewrite: m_ProxyRewrite,
+  target: `http://localhost:3000`, // default fallback, router takes precedence
+  ws: true,
+  changeOrigin: true,
+  on: {
+    error: (err, req, res, target) => {
+      console.log(PRE, $T(), '??? Proxy Error:', err);
+      if (res.writeHead && !res.headersSent) {
+        res.writeHead(500, {
+          'Content-Type': 'text/plain'
+        });
+      }
+      res.end('Something went wrong with the proxy.');
+    },
+    close: (proxyRes, proxySocket, proxyHead) => {
+      console.log(PRE, $T(), '??? Proxy client closed');
+    }
+  }
 });
+app.use('/graph/:graph/:file?', proxy);
+
 
 /// EXPRESS ERROR ROUTES //////////////////////////////////////////////////////
 /// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -807,6 +845,7 @@ app.get('/error_out_of_memory', (req, res) => {
 app.get('/graph/:file', (req, res) => {
   m_SendErrorResponse(res, "Bad URL. Missing trailing '/'.");
 });
+
 
 // EXPRESS UTILITY ROUTES /////////////////////////////////////////////////////
 /// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -944,7 +983,8 @@ app.get('/', (req, res) => {
  *  This HAS to be the last route!
  */
 app.use(
-  createProxyMiddleware('/', {
+  '/',
+  createProxyMiddleware({
     target: `http://localhost:3000`,
     ws: true,
     changeOrigin: true
