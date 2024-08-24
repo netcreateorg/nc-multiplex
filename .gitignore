@@ -13,3 +13,6 @@ SESAME
 # ignore digital ocean start script, logs
 do-start.sh
 log.txt
+
+# ignore process saving files
+.nc-process-state.json

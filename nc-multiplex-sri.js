@@ -62,7 +62,7 @@ const argv = require('minimist')(process.argv.slice(2));
 const GOOGLEA = argv['googlea'];
 const IP = argv['ip'];
 /// local data structures
-const m_proxy_pool = []; // array of available port indices, usu [1...100]
+let m_proxy_pool = []; // array of available port indices, usu [1...100]
 let m_child_processes = []; // array of forked process + meta info = { db, port, netport, portindex, process };
 /// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 let HOMEPAGE_EXISTS; // Flag for existence of home.html override
@@ -71,6 +71,8 @@ let PASSWORD_HASH; // Hash generated from password
 /// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 const CYN = '\x1b[96m'; // cyan
 const CYNR = '\x1b[46m'; // reversed cyan
+const GRN = '\x1b[92m'; // green
+const GRNR = '\x1b[42m'; // green reversed
 const RST = '\x1b[0m'; // reset
 const RED = '\x1b[91m'; // red
 const WARN = '\x1b[93m'; // yellow
@@ -474,6 +476,7 @@ async function SpawnApp(db) {
   try {
     const newProcessDef = await m_PromiseApp(db);
     AddChildProcess(newProcessDef);
+    SaveProcessState();
     return newProcessDef.port;
   } catch (err) {
     console.error(PRE + 'SpawnApp Failed with error', err);
@@ -560,6 +563,63 @@ function AddChildProcess(newProcess) {
   m_child_processes.push(newProcess);
 }
 /// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+/** Save the Process Datastructures from m_child_processes and m_proxy_pool
+ * to a file.  This is used to save the state of the multiplex server */
+function SaveProcessState() {
+  const process_entries = m_child_processes.map(route => {
+    return {
+      db: route.db,
+      port: route.port,
+      netport: route.netport,
+      portindex: route.portindex
+    };
+  });
+  const ncmState = {
+    child_processes: process_entries,
+    proxy_pool: m_proxy_pool
+  };
+  fs.writeFileSync('.nc-process-state.json', JSON.stringify(ncmState));
+}
+/// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+/** Restore Process Datastructures, bypassing the m_PromiseApp() process
+ *  Duplicated much of m_PromiseApp()
+ */
+async function LoadProcessState(child_processes, proxy_pool) {
+  console.log(PRE, `${GRNR} <<< RESTORING DATASETS <<<${RST} `);
+  for (route of child_processes) {
+    const { db, port, netport, portindex } = route;
+    const info = `${db}:${port}/${netport}`;
+    console.log(PRE, `${GRN}<<< restarting '${db}' on ${info} ${RST}`);
+    await new Promise((resolve, reject) => {
+      const forked = fork('./nc-launch-instance.jssh', [info]);
+      // define success handler
+      forked.on('message', msg => {
+        const { event } = msg;
+        if (event === 'SUCCESS') {
+          console.log(PRE, $T(), `${GRN}<<< RESTORED '${db}' on (port ${port})`, RST);
+          route.process = forked;
+          resolve();
+        } else {
+          console.log(PRE, `${RED}<<< RESTORE '${db}' failed`, RST);
+          reject(`Failed to restart instance '${db}'`);
+        }
+      }); // end forked.on
+      const ncStartParams = {
+        db,
+        port,
+        netport,
+        portindex,
+        GOOGLEA: GOOGLEA,
+        process: forked
+      };
+      forked.send(ncStartParams);
+    }); // end promise
+  } // end for
+  m_proxy_pool = proxy_pool;
+  m_child_processes = child_processes;
+}
+
+/// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 /** Used to check if we have enough memory to start a new node process
  *  This is used to prevent node from starting too many processes.
  */
@@ -567,6 +627,20 @@ function OutOfMemory() {
   let free = os.freemem() / 1024; // mb
   return free < MEMORY_MIN;
 }
+
+/*///////////////////////////// RUNTIME START \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\*\
+
+
+  Start of Server Execution on Module Load
+  - emit console header timestamp
+  - check .nvmrc and node version
+  - detect home page availability
+  - read management password from SESAME file
+
+
+
+
+\*\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\ * /////////////////////////////////////*/
 
 /// RUNTIME: START LOGGING OUTPUT /////////////////////////////////////////////
 /// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -618,19 +692,18 @@ try {
 }
 PASSWORD_HASH = GetHash(PASSWORD);
 
-/// EXPRESS STARTUP ///////////////////////////////////////////////////////////
+/// RUNTIME: START HEARTBEAT TIMER ///////////////////////////////////////////////
+/// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+m_MemLog();
+setInterval(m_MemLog, HEARTBEAT * 60 * 1000); // log memory usage every X minutes
+
+/// EXPRESS CONFIGURATION /////////////////////////////////////////////////////
 /// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 // START BASE APP
 // This is needed to handle static file requests.
 // Most imports/requires do not specify the db route /graph/dbname/
 // so we need to provide a base app that responds to those static file
 // requests.  This starts a generic "base" dataset at port 3000.
-
-SpawnApp('base');
-
-// start heartbeat timer and initial memory log
-m_MemLog();
-setInterval(m_MemLog, HEARTBEAT * 60 * 1000); // log memory usage every X minutes
 
 const app = express();
 app.use(express.urlencoded({ extended: true }));
@@ -661,7 +734,6 @@ app.get(`/graph/:graph/${NC_URL_CONFIG}`, (req, res) => {
   res.set('Content-Type', 'application/javascript');
   res.send(response);
 });
-
 
 /// PROXY GRAPH REDIRECT //////////////////////////////////////////////////////
 /// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -773,7 +845,7 @@ function m_ProxyRewrite(rpath, req) {
   // e.g. localhost/graph/hawaii/#/edit/mop => localhost:3000/#/edit/mop
 
   const fullPath = req.originalUrl;
-  if (req.originalUrl===undefined) {
+  if (req.originalUrl === undefined) {
     console.log(PRE, $T(), '??? ProxyRewrite req.originalUrl is undefined');
     return rpath;
   }
@@ -816,7 +888,6 @@ const proxy = createProxyMiddleware({
 });
 app.use('/graph/:graph/:file?', proxy);
 
-
 /// EXPRESS ERROR ROUTES //////////////////////////////////////////////////////
 /// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 /// HANDLE NO DATABASE -- RETURN ERROR
@@ -846,7 +917,6 @@ app.get('/graph/:file', (req, res) => {
   m_SendErrorResponse(res, "Bad URL. Missing trailing '/'.");
 });
 
-
 // EXPRESS UTILITY ROUTES /////////////////////////////////////////////////////
 /// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 // HANDLE "/kill/:graph" -- KILL REQUEST
@@ -862,6 +932,7 @@ app.get('/kill/:graph/', (req, res) => {
   console.log(PRE, $T(), `GET /kill/${db} (client ${req.ip})`);
   res.set('Content-Type', 'text/html');
   let response = `<h1>NetCreate Manager</h1>`;
+
   const child = m_child_processes.find(child => child.db === db);
   if (child) {
     try {
@@ -870,6 +941,7 @@ app.get('/kill/:graph/', (req, res) => {
       ReleasePort(child.portindex);
       // Remove child from m_child_processes
       m_child_processes = m_child_processes.filter(child => child.db !== db);
+      SaveProcessState(); // save state after updating process data structure
       console.log(PRE, $T(), `/kill/${db} process killed`);
       response += `<p>Process ${db} killed.</p>`;
     } catch (e) {
@@ -884,6 +956,7 @@ app.get('/kill/:graph/', (req, res) => {
   response += `<p><a href="/manage">Back to Multiplex Manager</a></p>`;
   res.send(response);
 });
+/// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 /// HANDLE "/maketoken" -- GENERATE TOKENS
 app.get('/maketoken/:clsid/:projid/:dataset/:numgroups', (req, res) => {
   const { clsid, projid, dataset, numgroups } = req.params;
@@ -1011,4 +1084,45 @@ app.use(
 app.listen(PORT_ROUTER, () => {
   console.log(PRE, $T());
   console.log(PRE, `NC-MULTIPLEX Express Server running on port ${PORT_ROUTER}.`);
+
+  // if .nc-process-state.json exists, read and parse it
+  if (!fs.existsSync('.nc-process-state.json')) {
+    console.log(PRE, 'No .nc-process-state.json found. Starting fresh.');
+    SpawnApp('base');
+    SaveProcessState();
+  } else {
+    try {
+      const text = fs.readFileSync('.nc-process-state.json', 'utf8');
+      const json = JSON.parse(text);
+      const { child_processes, proxy_pool } = json;
+      if (child_processes.length > 0) {
+        LoadProcessState(child_processes, proxy_pool);
+      } else {
+        SpawnApp('base');
+        SaveProcessState();
+      }
+    } catch (err) {
+      console.log(PRE, $T(), 'error loading .nc-process-state.json', err);
+      console.log(
+        PRE,
+        $T(),
+        'check contents of file, delete file, and restart manually'
+      );
+      process.exit(1);
+    }
+  }
+});
+
+/// PROCESS SIGNAL HANDLERS ///////////////////////////////////////////////////
+/// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+process.on('SIGINT', () => {
+  console.log(PRE, '*** SIGINT RECEIVED - EXITING ***');
+  console.log(PRE, 'nc-multiplex stopped via SIGINT:', $T());
+  process.exit(0);
+});
+/// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+process.on('SIGTERM', () => {
+  console.log(PRE, '*** SIGTERM RECEIVED - EXITING ***');
+  console.log(PRE, 'nc-multiplex stopped via SIGTERM:', $T());
+  process.exit(0);
 });
