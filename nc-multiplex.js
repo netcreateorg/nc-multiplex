@@ -51,7 +51,7 @@ const PORT_WS = 4000; // base port for websockets
 const DEFAULT_PASSWORD = 'kpop'; // override with SESAME file
 /// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 const PROCESS_MAX = 30; // Set this to limit the number of running processes
-const MEMORY_MIN = 256; // MB. Each node process is generally ~30 MB.
+const SYSMEM_MIN = 256; // MB. Each node process is generally ~30 MB.
 const AUTO_NEW = false; // Set to true to allow auto-spawning a new database via url.
 const AUTH_MINUTES = 2; // Minutes. Number of minutes to authorize login cookie
 const HEARTBEAT = 15; // Minutes. Number of minutes between memory log heartbeats
@@ -97,19 +97,29 @@ function m_MemoryReport(unit = 'kb') {
   const hpct = (100 * (heapUsed / heapTotal)).toFixed(2);
   const hrem = _fmt(Math.trunc((heapTotal - heapUsed) / cf));
   const kb2mb = 1024 * 1024;
-  const sysTotal = _fmt(Math.trunc(os.totalmem() / kb2mb));
-  const sysFree = _fmt(Math.trunc(os.freemem() / kb2mb));
+  const osTotal = Math.trunc(os.totalmem() / kb2mb);
+  const osFree = Math.trunc(os.freemem() / kb2mb);
+  const osUsed = osTotal - osFree;
+  const sysTotal = _fmt(osTotal);
+  const sysFree = _fmt(osFree);
+  const sysUsed = _fmt(osUsed);
+  const sysPercent = (100 * (osUsed / osTotal)).toFixed(2);
+  const sysLow = osFree < SYSMEM_MIN;
 
   const pids = m_GetInstancePIDs();
   return {
-    unit,
-    heapUsed: huse,
-    heapTotal: htot,
-    heapPercent: hpct,
-    heapBuffer: hrem,
-    pids,
-    sysTotalMB: sysTotal,
-    sysFreeMB: sysFree
+    unit, // kb or mb
+    heapTotal: htot, // total allocated javascript heap (can grow)
+    heapUsed: huse, // total used heap (can grow)
+    heapPercent: hpct, // heap percentage used (percentage)
+    heapBuffer: hrem, // heap remaining
+    pids, // multi-line string of instance PIDs info
+    sysTotalMB: sysTotal, // total system memory in MB
+    sysFreeMB: sysFree, // free system memory in MB
+    sysUsedMB: sysUsed, // used system memory in MB
+    sysMinMem: SYSMEM_MIN, // minimum system memory in MB
+    sysPercent: sysPercent, // percentage of system memory used
+    warnLowMem: sysLow // true if system memory is below SYSMEM_MIN
   };
 }
 /// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -305,13 +315,19 @@ function RenderLoginForm() {
 function RenderManager() {
   let response = logoHtml;
   response += `<script>
+    const startTime = new Date().getTime();
     setInterval( ()=> {
       if (!document.cookie.includes('nc-multiplex-auth')) {
-        document.getElementById('login').style.display = 'block';
-        document.getElementById('graphs').style.display = 'none';
-        document.getElementById('forms').style.display = 'none';
+        location.reload();
       };
-    }, 3000);
+      const status = document.getElementById('status');
+      let elapsed = (new Date().getTime() - startTime) / 1000;
+      let remaining = ${AUTH_MINUTES * 60} - elapsed;
+      let unit = 's';
+      let out = '(' + remaining.toFixed(0) + unit + ' until auto logout)';
+      if (remaining < 30) status.style.color = 'red';
+      status.innerHTML = out;
+    }, 1000);
   </script>`;
   response += `<div id="login" style="display: none">` + RenderLoginForm() + `</div>`;
   response += `<style>.box { background-color: #EEF; padding: 20px; margin: 0 0 20px 20px}</style>`;
@@ -324,7 +340,7 @@ function RenderManager() {
   response += RenderGenerateTokensForm();
   response += `</div>`;
   response += RenderMemoryReport();
-  response += `<p>Updated: ${new Date().toLocaleTimeString()}</p >`;
+  response += `<p><i>page last loaded on: ${m_stat.refreshed.toLocaleTimeString()} <span id='status'></span></i></p >`;
   return response;
 }
 /// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -453,16 +469,16 @@ function RenderGenerateTokensForm() {
 }
 /// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 function RenderMemoryReport() {
-  const mem = m_MemoryReport();
-  const { unit, heapUsed, heapTotal, heapPercent, heapBuffer, pids } = mem;
-  const { sysTotalGB, sysFreeGB } = mem;
-
-  let response = `<p>MEMORY`;
-  response += ` :: Used: ${heapUsed}${unit} / ${heapTotal}${unit} (${heapPercent}%) `;
-  response += ` :: Remaining: ${heapBuffer}${unit}`;
-  response += ` :: LowMem: ${OutOfMemory()}</p>`;
+  const { sysUsedMB, sysFreeMB, sysTotalMB, sysPercent } = m_MemoryReport();
+  let response = '';
+  response += `<pre>SERVER STARTED AT  :: ${m_stat.start}</pre>`;
+  response += `<pre>SERVER MEMORY LOAD`;
+  response += ` :: Used: ${sysUsedMB}MB / ${sysTotalMB}MB (${sysPercent}%)`;
+  response += ` :: Remaining: ${sysFreeMB}MB`;
+  response += ` :: LowMem: ${OutOfMemory()}`;
+  response += `</pre>`;
   const psOut = m_GetInstancePIDs();
-  response += `<pre>DETECTED LAUNCH INSTANCES\n${psOut}</pre>`;
+  response += `<pre>LAUNCHED PROCESSES ::\n\n${psOut}</pre>`;
   return response;
 }
 
@@ -626,7 +642,7 @@ async function LoadProcessState(child_processes, proxy_pool) {
  */
 function OutOfMemory() {
   let free = os.freemem() / 1024; // mb
-  return free < MEMORY_MIN;
+  return free < SYSMEM_MIN;
 }
 
 /*///////////////////////////// RUNTIME START \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\*\
@@ -643,9 +659,16 @@ function OutOfMemory() {
 
 /// RUNTIME: START LOGGING OUTPUT /////////////////////////////////////////////
 /// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+const m_stat = {
+  start: '', // timestamp of server start
+  refreshed: '' // timestamp of last refresh
+};
+m_stat.start = $T();
+fs.writeFileSync('.nc-server-start.txt', m_stat.start);
+///
 console.log(`\n\n\n`);
 console.log('-'.repeat(80));
-console.log(PRE, 'nc-multiplex started:', $T());
+console.log(PRE, 'nc-multiplex started:', m_stat.start);
 console.log(PRE);
 
 /// RUNTIME: CHECK FOR BASE REPO //////////////////////////////////////////////
@@ -660,13 +683,9 @@ if (primary === undefined) {
 if (count === 1) {
   console.log(PRE, `reference subrepo: ${primary.repo}`);
 } else {
-  console.log(
-    PRE,
-    `${WARN}WARNING: multiple NetCreate repos (${count}) found${RST}`
-  );
+  console.log(PRE, `${WARN}WARNING: multiple NetCreate repos (${count}) found${RST}`);
   console.log(SPC, `defaulting to ${WARN}${primary.repo}${RST}`);
 }
-
 
 /// RUNTIME: CHECK NODE VERSION ///////////////////////////////////////////////
 /// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -736,7 +755,7 @@ app.use(cookieParser());
  *  This route has to go before /graph/:graph/:file? below
  */
 app.get(`/graph/:graph/${NC_URL_CONFIG}`, (req, res) => {
-  const db = req.params.graph;
+  const db = STAT.graph;
   let response = '';
   const child = m_child_processes.find(child => child.db === db);
   if (child) {
@@ -763,11 +782,11 @@ app.get(`/graph/:graph/${NC_URL_CONFIG}`, (req, res) => {
  *  it will spawn a new process if able to.
  */
 async function m_RouterLogic(req) {
-  if (req.params === undefined) {
-    console.log(PRE, $T(), 'ERROR in m_RouterLogic: req.params is undefined');
+  if (STAT === undefined) {
+    console.log(PRE, $T(), 'ERROR in m_RouterLogic: STAT is undefined');
     console.log(PRE, $T(), 'req.ip:', req.ip);
   }
-  const db = req.params.graph;
+  const db = STAT.graph;
   let port;
   let path = '';
 
@@ -819,13 +838,13 @@ async function m_RouterLogic(req) {
 /// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 /** CONFIG FUNCTION: m_ProxyFilter nominally rewrites the /graph/{db} to
  *  localhost:{port}, but it also contains some debug code to detect if
- *  req.params is undefined as we have seen this on our servers and are trying
+ *  STAT is undefined as we have seen this on our servers and are trying
  *  to log the conditions when this happens.
  *  @param {string} rpath - route to check (remainder after any params)
  *  @param {Express.Request} req - request object
  */
 function m_ProxyFilter(rpath, req) {
-  // sri debug detect if req.params is undefined
+  // sri debug detect if STAT is undefined
   if (req === undefined) {
     console.log(PRE, $T(), `??? USE ${route} req is undefined`);
     return false;
@@ -843,15 +862,15 @@ function m_ProxyFilter(rpath, req) {
       );
     }
   }
-  if (req.params === undefined) {
-    console.log(PRE, $T(), `${WARN}??? USE ${rpath} req.params is undefined`, RST);
+  if (STAT === undefined) {
+    console.log(PRE, $T(), `${WARN}??? USE ${rpath} STAT is undefined`, RST);
     return false;
   }
   // pass if there is a file
   // (srinote: this param only contains the first segment, which may be a bug)
-  if (req.params.file) return true; // only first segment of path (bug?)
+  if (STAT.file) return true; // only first segment of path (bug?)
   // pass if there is a trailing '/'
-  if (req.params.graph && req.originalUrl.endsWith('/')) return true; // legit graph
+  if (STAT.graph && req.originalUrl.endsWith('/')) return true; // legit graph
   return false;
 }
 /// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -873,8 +892,8 @@ function m_ProxyRewrite(rpath, req) {
       instead of the full path as before, so use req.originalUrl instead
   /*/
 
-  // const rewrite = rpath.replace(`/graph/${req.params.graph}`, '');
-  const rewrite = fullPath.replace(`/graph/${req.params.graph}/`, '/');
+  // const rewrite = rpath.replace(`/graph/${STAT.graph}`, '');
+  const rewrite = fullPath.replace(`/graph/${STAT.graph}/`, '/');
   return rewrite;
 }
 /// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -940,14 +959,14 @@ app.get('/graph/:file', (req, res) => {
 /// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 // HANDLE "/kill/:graph" -- KILL REQUEST
 app.get('/kill/:graph/', (req, res) => {
-  if (req.params === undefined) {
-    console.log(PRE, $T(), 'ERROR: req.params is undefined for /kill/:graph/');
+  if (STAT === undefined) {
+    console.log(PRE, $T(), 'ERROR: STAT is undefined for /kill/:graph/');
     const fullUrl = req.protocol + '://' + req.get('host') + req.originalUrl;
     console.log(PRE, `error url: ${fullUrl}`);
     console.log(PRE, `client ip: ${req.ip}`);
     return;
   }
-  const db = req.params ? req.params.graph : '';
+  const db = STAT ? STAT.graph : '';
   console.log(PRE, $T(), `GET /kill/${db} (client ${req.ip})`);
   res.set('Content-Type', 'text/html');
   let response = `<h1>NetCreate Manager</h1>`;
@@ -978,7 +997,7 @@ app.get('/kill/:graph/', (req, res) => {
 /// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 /// HANDLE "/maketoken" -- GENERATE TOKENS
 app.get('/maketoken/:clsid/:projid/:dataset/:numgroups', (req, res) => {
-  const { clsid, projid, dataset, numgroups } = req.params;
+  const { clsid, projid, dataset, numgroups } = STAT;
   console.log(
     PRE,
     $T(),
@@ -1012,8 +1031,12 @@ app.get('/maketoken/:clsid/:projid/:dataset/:numgroups', (req, res) => {
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 /// HANDLE MANAGER PAGE
 app.get('/manage', (req, res) => {
+  m_stat.refreshed = new Date();
   console.log(PRE, $T(), `GET /manage (client ${req.ip})`);
   if (CookieIsValid(req)) {
+    res.cookie('nc-multiplex-auth', PASSWORD_HASH, {
+      maxAge: AUTH_MINUTES * 60 * 1000
+    }); // ms
     res.set('Content-Type', 'text/html');
     res.send(RenderManager());
   } else {
@@ -1091,7 +1114,7 @@ app.use(
     console.log("...req.path", req.path);               // '/'
     console.log("...req.baseUrl", req.baseUrl);         // '/hawaii'
     console.log("...req.originalUrl", req.originalUrl); // '/hawaii/'
-    console.log("...req.params", req.params);           // '{}'
+    console.log("...STAT", STAT);           // '{}'
     console.log("...req.query", req.query);             // '{}'
     console.log("...req.route", req.route);             // undefined
     console.log("...req.hostname", req.hostname);       // 'sub.localhost'
@@ -1136,12 +1159,14 @@ app.listen(PORT_ROUTER, () => {
 /// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 process.on('SIGINT', () => {
   console.log(PRE, '*** SIGINT RECEIVED - EXITING ***');
+  console.log(PRE);
   console.log(PRE, 'nc-multiplex stopped via SIGINT:', $T());
   process.exit(0);
 });
 /// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 process.on('SIGTERM', () => {
   console.log(PRE, '*** SIGTERM RECEIVED - EXITING ***');
+  console.log(PRE);
   console.log(PRE, 'nc-multiplex stopped via SIGTERM:', $T());
   process.exit(0);
 });

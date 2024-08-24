@@ -16,3 +16,4 @@ log.txt
 
 # ignore process saving files
 .nc-process-state.json
+.nc-server-start.txt
