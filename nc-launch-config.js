@@ -55,27 +55,9 @@ function ScanForRepos() {
   };
 }
 
-/// RUNTIME CHECKS ////////////////////////////////////////////////////////////
-/// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-const { primary, count } = ScanForRepos();
-if (primary === undefined) {
-  console.warn(PRE, '\x1b[97;41m***ERROR*** no primary NetCreate repo found\x1b[0m');
-  console.warn(SPC, 'Make sure you installed a repo to launch from.');
-  console.warn(SPC, 'See \x1b[93mReadMe.md\x1b[0m for details.');
-  process.exit(1);
-}
-if (count === 1) {
-  console.log(PRE, `launching repo instance in ${primary.repo}`);
-} else {
-  console.log(
-    PRE,
-    `\x1b[93mWARNING: multiple NetCreate repos (${count}) found\x1b[0m`
-  );
-  console.log(SPC, `defaulting to \x1b[93m${primary.repo}\x1b[0m`);
-}
-
 /// EXPORTS ///////////////////////////////////////////////////////////////////
 /// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+const { primary, count, repoExists } = ScanForRepos();
 const { repo, build, config, pubConfig } = primary;
 const NC_PATH = `./${path.join(repo, build)}`;
 const NC_SERVER_PATH = `./${path.join(repo, build)}`;
@@ -83,6 +65,7 @@ const NC_CONFIG_PATH = `./${path.join(repo, build, config)}`;
 const NC_URL_CONFIG = pubConfig;
 /// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 module.exports = {
+  ScanForRepos,
   NC_PATH,
   NC_SERVER_PATH,
   NC_CONFIG_PATH,

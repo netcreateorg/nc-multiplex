@@ -34,7 +34,7 @@ const express = require('express');
 const cookieParser = require('cookie-parser');
 const crypto = require('crypto');
 // session-related imports from netcreate subrepo
-const { NC_SERVER_PATH, NC_URL_CONFIG } = require('./nc-launch-config');
+const { NC_SERVER_PATH, NC_URL_CONFIG, ScanForRepos } = require('./nc-launch-config');
 const SESSION = require(`${NC_SERVER_PATH}/app/unisys/common-session.js`);
 //
 const NCUTILS = require('./modules/nc-utils.js');
@@ -42,7 +42,8 @@ const NCLOG = require('./modules/nc-logging-utils');
 
 /// CONSTANTS & DECLARATIONS //////////////////////////////////////////////////
 /// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-PRE = 'NC_MUX   -'; // console.log prefix, match length of netcreate output
+const PRE = 'NC_MUX   -'; // console.log prefix, match length of netcreate output
+const SPC = ' '.repeat(PRE.length);
 /// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 const PORT_ROUTER = 80;
 const PORT_APP = 3000; // base port for nc apps
@@ -585,7 +586,7 @@ function SaveProcessState() {
  *  Duplicated much of m_PromiseApp()
  */
 async function LoadProcessState(child_processes, proxy_pool) {
-  console.log(PRE, `${GRNR} <<< RESTORING DATASETS <<<${RST} `);
+  console.log(PRE, `${GRNR} <<< RESTORING DATASETS <<< ${RST}`);
   for (route of child_processes) {
     const { db, port, netport, portindex } = route;
     const info = `${db}:${port}/${netport}`;
@@ -638,8 +639,6 @@ function OutOfMemory() {
   - read management password from SESAME file
 
 
-
-
 \*\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\ * /////////////////////////////////////*/
 
 /// RUNTIME: START LOGGING OUTPUT /////////////////////////////////////////////
@@ -648,6 +647,26 @@ console.log(`\n\n\n`);
 console.log('-'.repeat(80));
 console.log(PRE, 'nc-multiplex started:', $T());
 console.log(PRE);
+
+/// RUNTIME: CHECK FOR BASE REPO //////////////////////////////////////////////
+/// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+const { primary, count } = ScanForRepos();
+if (primary === undefined) {
+  console.log(PRE, `${RED}ERROR: no primary NetCreate repo found${RST}`);
+  console.log(SPC, `Make sure you installed a repo to launch from.`);
+  console.log(SPC, `See ${WARN}ReadMe.md${RST} for details.`);
+  process.exit(1);
+}
+if (count === 1) {
+  console.log(PRE, `reference subrepo: ${primary.repo}`);
+} else {
+  console.log(
+    PRE,
+    `${WARN}WARNING: multiple NetCreate repos (${count}) found${RST}`
+  );
+  console.log(SPC, `defaulting to ${WARN}${primary.repo}${RST}`);
+}
+
 
 /// RUNTIME: CHECK NODE VERSION ///////////////////////////////////////////////
 /// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
