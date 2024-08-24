@@ -14,9 +14,7 @@ const WebSocket = require('ws');
 /// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 const LOG = console.log.bind(console);
 /// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-const STAGE = '159.203.177.172'; // staging server
 const LOCALHOST = '127.0.0.1';
-const DEVSTAGE = '24.144.94.149';
 const ARGS = process.argv.slice(2);
 let [host, port] = ARGS; 
 

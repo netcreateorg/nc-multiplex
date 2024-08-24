@@ -17,14 +17,14 @@ const LOG = console.log.bind(console);
 
 /// HELPER FUNCTIONS //////////////////////////////////////////////////////////
 /// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-/** get the output of ps matching nc-launch-instance.js entries */
+/** get the output of ps matching nc-launch-instance.jssh entries */
 function m_GetInstancePIDs() {
-  const stdout = execSync('ps -e -o pid -o command | grep nc-launch-instance.js');
+  const stdout = execSync('ps -e -o pid -o command | grep nc-launch-instance.jssh');
   const regex = /(\d+).+\/versions\/node\/(.+)/;
   const lines = stdout.toString().split('\n');
   let out = '';
   lines.forEach(line => {
-    if (line.includes('/bin/node ./nc-launch-instance.js')) {
+    if (line.includes('/bin/node ./nc-launch-instance.jssh')) {
       const match = line.match(regex);
       if (match) {
         const [_, pid, cli] = match;
