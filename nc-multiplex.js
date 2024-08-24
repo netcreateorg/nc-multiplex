@@ -1,258 +1,182 @@
-/*
+/*///////////////////////////////// ABOUT \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\*\
 
-  nc-multiplex.js
+  NETCREATE MULTIPLEX SERVER - REMIX (2024)
+  Reformatted for debugging by Sri, so new bugs are mine :-)
 
-      This creates a node-based proxy server that will
-      spin up individual NetCreate graph instances
-      running on their own node processes.
+  --- original comments ---
 
-      To start this manually:
-        `node nc-multiplex.js`
+  To start a new graph:
+    http://localhost/graph/tacitus/
 
-      Or use `npm run start`
+    If the graph already exists, it will be loaded. Otherwise it will create a new graph.
+    You need to be logged into the manager for this to work.
 
-      Then go to `localhost` to view the manager.
-      (NOTE: This runs on port 80, so need to add a port)
+  Manager runs on `http://localhost:80`
 
-      The manager will list the running databases.
+  proxied routes
+    /                            => localhost:80 Root: NetCreate Manager page
+    /graph/<dbname>/#/edit/uid   => localhost:3x00/#/edit/uid
+    /*.[js,css,html]             => localhost:3000/net-lib.js
 
-      To start a new graph:
-        `http://localhost/graph/tacitus/`
+  flags
 
-      If the graph already exists, it will be loaded.
-      Otherwise it will create a new graph.
-      (You need to be logged into the manager for this
-      to work.)
+    node nc-multiplex.js --IP=192.168.1.40
+    node nc-multiplex.js --GOOGLEA=xxxxx
 
-      Refresh the manager to view running databases.
-
-
-  # Setting IP or Google Analytics code
-
-      Use the optional `--ip` or `--googlea` parameters if you need
-      to start the server with a specific IP address or google
-      analytics code. e.g.:
-
-        `node nc-multiplex.js --ip=192.168.1.40`
-        `node nc-multiplex.js --googlea=xxxxx`
-
-
-  # Route Scheme
-
-      /                            => localhost:80 Root: NetCreate Manager page
-      /graph/<dbname>/#/edit/uid   => localhost:3x00/#/edit/uid
-      /*.[js,css,html]             => localhost:3000/net-lib.js
-
-
-  # Port scheme
-
-      The proxy server runs on port 80.
-      Defined in `port_router`
-
-      Base application port is 3000
-      Base websocket port is 4000
-
-      When the app is started, we initialize a pool of ports
-      indices basedon the PROCESS_MAX value.
-
-      When a process is spawned, we grab from the pool of port
-      indices, then generate new port numbers based on the
-      index, where the app port and the websocket (net) port share
-      the same basic index, e.g.
-
-      {
-        index: 2,
-        appport: 3002,
-        netport: 4002
-      }
-
-      When the process is killed, the port index is returned
-      to the pool and re-used.
-
-
-  # netcreate-config.js / NC_CONFIG
-
-      NC_CONFIG is actually used by both the server-side scripts and
-      client-side scripts to set the active database, ip, ports,
-      netports, and google analytics code.
-
-      As such, it is generated twice:
-      1. server-side: nc-start.js will generate a local file version into /build/app/assets
-         where it is used by brunch-server.js, brunch-config.js, and server-database.js
-         during the app start process.
-      2. client-side: nc-multiplex.js will then dynamically generate netcreate-config.js
-         for each graph's http request.
-
-      REVIEW: There is a potential conflict server-side if two graphs
-      are started up at the same time and the newly generated netcreate-config.js
-      files cross each other.
-
-      REVIEW: The dynamically generated client-side version should probably be cached.
-
-*/
-
-///////////////////////////////////////////////////////////////////////////////
-//
-//  CONSTANTS
+\*\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\ * /////////////////////////////////////*/
 
 const { createProxyMiddleware } = require('http-proxy-middleware');
-const { fork, exec } = require('child_process');
+const { fork, exec, execSync } = require('child_process');
+const os = require('os');
 const fs = require('fs');
 const path = require('path');
 const express = require('express');
 const cookieParser = require('cookie-parser');
 const crypto = require('crypto');
-
-// SRI HACK IN TIMESTAMP
-const {strDateStamp, strTimeStamp} = require('./modules/nc-logging-utils');
-const TSTART = `${strDateStamp()} ${strTimeStamp()}`; // Start time
-const $T=()=>`${strDateStamp()} ${strTimeStamp()}`; // Update time
-
-const app = express();
-app.use(express.urlencoded({ extended: true }));
-app.use(cookieParser());
-
+// session-related imports from netcreate subrepo
+const { NC_SERVER_PATH, NC_URL_CONFIG, ScanForRepos } = require('./nc-launch-config');
+const SESSION = require(`${NC_SERVER_PATH}/app/unisys/common-session.js`);
+//
 const NCUTILS = require('./modules/nc-utils.js');
-const { NC_SERVER_PATH, NC_URL_CONFIG } = require('./nc-launch-config');
-const PRE = '...nc-multiplex: '; // console.log prefix
+const NCLOG = require('./modules/nc-logging-utils');
 
-// SETTINGS
+/// CONSTANTS & DECLARATIONS //////////////////////////////////////////////////
+/// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+const PRE = 'NC_MUX   -'; // console.log prefix, match length of netcreate output
+const SPC = ' '.repeat(PRE.length);
+/// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 const PORT_ROUTER = 80;
 const PORT_APP = 3000; // base port for nc apps
 const PORT_WS = 4000; // base port for websockets
 const DEFAULT_PASSWORD = 'kpop'; // override with SESAME file
-
+/// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+const PROCESS_MAX = 30; // Set this to limit the number of running processes
+const MEMORY_MIN = 256; // MB. Each node process is generally ~30 MB.
+const AUTO_NEW = false; // Set to true to allow auto-spawning a new database via url.
+const AUTH_MINUTES = 2; // Minutes. Number of minutes to authorize login cookie
+const HEARTBEAT = 15; // Minutes. Number of minutes between memory log heartbeats
+/// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+/// detected node version
+let NVMRC;
+/// command line flags
+const argv = require('minimist')(process.argv.slice(2));
+const GOOGLEA = argv['googlea'];
+const IP = argv['ip'];
+/// local data structures
+let m_proxy_pool = []; // array of available port indices, usu [1...100]
+let m_child_processes = []; // array of forked process + meta info = { db, port, netport, portindex, process };
+/// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 let HOMEPAGE_EXISTS; // Flag for existence of home.html override
 let PASSWORD; // Either default password or password in `SESAME` file
 let PASSWORD_HASH; // Hash generated from password
-let childProcesses = []; // array of forked process + meta info = { db, port, netport, portindex, process };
+/// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+const CYN = '\x1b[96m'; // cyan
+const CYNR = '\x1b[46m'; // reversed cyan
+const GRN = '\x1b[92m'; // green
+const GRNR = '\x1b[42m'; // green reversed
+const RST = '\x1b[0m'; // reset
+const RED = '\x1b[91m'; // red
+const WARN = '\x1b[93m'; // yellow
 
-// OPTIONS
-const PROCESS_MAX = 30; // Set this to limit the number of running processes
-// in order to keep a rein on CPU and MEM loads
-// If you set this higher than 100 you should make
-// sure you open inbound ports higher than 3100 and 4100
+/// SRI HACK IN TIMESTAMP /////////////////////////////////////////////////////
+/// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+const { strDateStamp, strTimeStamp } = NCLOG;
+const $T = () => `${strDateStamp()} ${strTimeStamp()}`; // return timestamp string
 
-const MEMORY_MIN = 256; // in MegaBytes
-// Don't start a new process if there is less than
-// MEMORY_MIN memory remaining.
-// In our testing with macOS and Ubuntu 18.04 on EC2:
-// * Each node process is generally ~30 MB.
-// * Servers stop responding with less than 100 MB remaining.
+/// HELPER METHODS ////////////////////////////////////////////////////////////
+/// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+/** return memory parameters */
+function m_MemoryReport(unit = 'kb') {
+  const _fmt = x => x.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  let cf;
+  if (unit === 'kb') cf = 1024;
+  if (unit === 'mb') cf = 1024 * 1024;
+  const { heapUsed, heapTotal } = process.memoryUsage();
+  const huse = _fmt(Math.trunc(heapUsed / cf));
+  const htot = _fmt(Math.trunc(heapTotal / cf));
+  const hpct = (100 * (heapUsed / heapTotal)).toFixed(2);
+  const hrem = _fmt(Math.trunc((heapTotal - heapUsed) / cf));
+  const kb2mb = 1024 * 1024;
+  const sysTotal = _fmt(Math.trunc(os.totalmem() / kb2mb));
+  const sysFree = _fmt(Math.trunc(os.freemem() / kb2mb));
 
-const ALLOW_NEW = false; // default = false
-// false: App will respond with ERROR NO DATABASE if you enter
-//        a url that points to a non-existent database.
-// true:  Set to true to allow auto-spawning a new database via
-//        url.  e.g. going to `http://localhost/graph/newdb/`
-//        would automatically create a new database if it
-//        didn't already exist.
-
-const AUTH_MINUTES = 2; // default = 30
-// Number of minutes to authorize login cookie
-// After AUTH_MINUTES, the user wil have to re-login.
-
-// ----------------------------------------------------------------------------
-// check nvm version
-let NODE_VER;
-try {
-  NODE_VER = fs.readFileSync('./.nvmrc', 'utf8').trim();
-} catch (err) {
-  console.error('could not read .nvmrc', err);
-  throw Error(`Could not read .nvmrc ${err}`);
+  const pids = m_GetInstancePIDs();
+  return {
+    unit,
+    heapUsed: huse,
+    heapTotal: htot,
+    heapPercent: hpct,
+    heapBuffer: hrem,
+    pids,
+    sysTotalMB: sysTotal,
+    sysFreeMB: sysFree
+  };
 }
-exec('node --version', (error, stdout, stderr) => {
-  if (stdout) {
-    stdout = stdout.trim();
-    if (stdout !== NODE_VER) {
-      console.log('\x1b[97;41m');
-      console.log(PRE, $T(), '*** NODE VERSION MISMATCH ***');
-      console.log(PRE, $T(), '.. expected', NODE_VER, 'got', stdout);
-      console.log(PRE, $T(), '.. did you remember to run nvm use?\x1b[0m');
-      console.log('');
+/// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+/** periodically log memory usage and running instances to console */
+function m_MemLog() {
+  let { heapUsed, heapTotal, heapPercent, sysFreeMB, unit, pids } = m_MemoryReport();
+  console.log(
+    PRE,
+    '* MEMORY HEARTBEAT',
+    $T(),
+    `- nodeHeap ${heapUsed} / ${heapTotal}${unit} (${heapPercent}%)`,
+    `- freeMem ${sysFreeMB}mb`
+  );
+  const out = pids.split('\n');
+  if (out.length > 1)
+    out.forEach(line => {
+      if (line.trim().length > 0) console.log(PRE, '*', line.trim());
+    });
+}
+/// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+/** Returns true if the db is currently running as a process
+ * @param {string} db - database name
+ */
+function m_DatabaseIsRunning(db) {
+  return m_child_processes.find(route => route.db === db);
+}
+/// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+/** get the output of ps matching nc-launch-instance.jssh entries */
+function m_GetInstancePIDs() {
+  const stdout = execSync('ps -e -o pid -o command | grep nc-launch-instance.jssh');
+  const regex = /(\d+).+\/versions\/node\/(.+)/;
+  const lines = stdout.toString().split('\n');
+  let out = '';
+  lines.forEach(line => {
+    if (line.includes('/bin/node ./nc-launch-instance.jssh')) {
+      const match = line.match(regex);
+      if (match) {
+        const [_, pid, cli] = match;
+        const paddedPid = pid.padEnd(7, ' ');
+        out += `  ${paddedPid} .nvm/versions/${cli}\n`;
+      }
     }
-    console.log(PRE, $T(), 'NODE VERSION:', stdout, 'OK');
-  }
-});
-
-// ----------------------------------------------------------------------------
-// READ OPTIONAL ARGUMENTS
-//
-// To set ip address or google analytics code, call nc-multiplex with
-// arguments, e.g.
-//
-//   `node nc-multiplex.js --ip=192.168.1.40`
-//   `node nc-multiplex.js --googlea=xxxxx`
-//
-
-const argv = require('minimist')(process.argv.slice(2));
-const googlea = argv['googlea'];
-const ip = argv['ip'];
-
-// ----------------------------------------------------------------------------
-// SET HOME PAGE OVERRIDE
-//
-// If there's a 'home.html' file, serve that at '/'.
-//
-try {
-  fs.accessSync('home.html', fs.constants.R_OK);
-  HOMEPAGE_EXISTS = true;
-} catch (err) {
-  // no home page, use default
-  HOMEPAGE_EXISTS = false;
+  });
+  return out;
+}
+/// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+/** express helper to return an error */
+function m_SendErrorResponse(res, msg) {
+  res.set('Content-Type', 'text/html');
+  res.send(
+    `<p>${msg}</p>
+    <p><a href="/manage">Back to Multiplex Manager</a></p>`
+  );
 }
 
-// ----------------------------------------------------------------------------
-// SET PASSWORD
-//
-// If there's a 'SESAME' file, use the password in there.
-// Otherwise, fallback to default.
-//
-try {
-  let sesame = fs.readFileSync('SESAME', 'utf8');
-  PASSWORD = sesame;
-} catch (err) {
-  // no password, use default
-  PASSWORD = DEFAULT_PASSWORD;
-}
-// Make Hash
-PASSWORD_HASH = GetHash(PASSWORD);
-
-///////////////////////////////////////////////////////////////////////////////
-//
-//  UTILITIES
-
-/**
- * Number formatter
- * From stackoverflow.com/questions/2901102/how-to-print-a-number-with-commas-as-thousands-separators-in-javascript
- * @param {integer} x
- * @return {string} Number formatted with commas, e.g. 123,456
- */
-function numberWithCommas(x) {
-  return x.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
-}
-
-/**
- * Returns true if the db is currently running as a process
- * @param {string} db
- */
-function DBIsRunning(db) {
-  return childProcesses.find(route => route.db === db);
-}
-
-/**
- * Generates a list of tokens using the NetCreate commoon-session module
- * REVIEW: Requiring a module from the secondary netcreate-2018 repo
- * is a little iffy.
- * @param {string} clsId
- * @param {string} projId
- * @param {string} dataset
- * @param {integer} numGroups
- * @return {string}
+/// SESSION OPERATIONS ////////////////////////////////////////////////////////
+/// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+/** Generates a list of tokens using the NetCreate common-session module
+ *  REVIEW: Requiring a module from the secondary netcreate-2018 repo
+ *  is a little iffy.
+ *  @param {string} clsId - classId
+ *  @param {string} projId - projectId
+ *  @param {string} dataset - database name
+ *  @param {integer} numGroups - number of tokens to generate
+ *  @return {string}
  */
 function MakeToken(clsId, projId, dataset, numGroups) {
-  const rpath = `${NC_SERVER_PATH}/app/unisys/common-session.js`;
-  const SESSION = require(rpath);
   // from nc-logic.js
   if (typeof clsId !== 'string')
     return 'args: str classId, str projId, str dataset, int numGroups';
@@ -274,20 +198,19 @@ function MakeToken(clsId, projId, dataset, numGroups) {
   }
   return out;
 }
-
-/**
- * Used to generate a hashed password for use in the cookie
- * so that password text is not visible in the cookie.
- * @param {string} pw
+/// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+/** Used to generate a hashed password for use in the cookie
+ *  so that password text is not visible in the cookie.
+ *  @param {string} pw - plain text password
+ *  @return {string} hash of password
  */
 function GetHash(pw) {
   let hash = crypto.createHash('sha1').update(pw).digest('hex');
   return hash;
 }
-
-/**
- * HASH is generated from the PASSWORD
- * @param {string} pw
+/// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+/** HASH is generated from the PASSWORD
+ *  @param {string} pw
  */
 function CookieIsValid(req) {
   if (!req || !req.cookies) return false;
@@ -296,60 +219,80 @@ function CookieIsValid(req) {
   return pw === PASSWORD_HASH;
 }
 
-///// PORT POOL ---------------------------------------------------------------
-
-// Initialize port pool
-//    port 0 is for the base app
-const port_pool = []; // array of available port indices, usu [1...100]
-for (let i = 0; i <= PROCESS_MAX; i++) {
-  port_pool.push(i);
-}
-/**
- * Gets the next available port from the pool.
+/// PORT POOLING //////////////////////////////////////////////////////////////
+/// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+/** The proxy server runs on port 80, hosting various management routes as well
+ *  as the /graph/<db>/ proxying
  *
- * @param {integer} index of route
- * @return {object} JSON object definition, e.g.
- * {
- *   index: integer    // e.g. 3
- *   appport: integer  // e.g. 3003
- *   netport: integer  // e.g. 4003
- * }
- * or `undefined` if no items are left in the pool
+ *  - Base application port is 3000
+ *  - Base websocket port is 4000
+ *
+ *  Launched NetCreate instances are reserved by m_proxy_pool. The entities
+ *  in m_proxy_pool range from 0...PROCESS_MAX, are stored as offsets from the
+ *  base ports. When an instance is killed through the management UI, the
+ *  port index is returned to the pool. The UI prevents the base app from being
+ *  reallocated.
+ */
+for (let i = 0; i <= PROCESS_MAX; i++) {
+  m_proxy_pool.push(i);
+}
+/// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+/** Gets the next available port from the pool.
+ *  @param {integer} index of route
+ *  @return {object.index} index of port (eg. 3)
+ *  @return {object.appport} port for app (e.g. 3003)
+ *  @return {object.netport} port for websocket (e.g. 4003)
+ *  or `undefined` if no items are left in the pool
  */
 function PickPort() {
-  if (port_pool.length < 1) return undefined;
-  const index = port_pool.shift();
+  if (m_proxy_pool.length < 1) return undefined;
+  const index = m_proxy_pool.shift();
   const result = {
     index,
     appport: PORT_APP + index,
     netport: PORT_WS + index
   };
+  // make sure that there are no duplicates in the pool
+  const dpool = Array.from(new Set(m_proxy_pool));
+  if (dpool.length !== m_proxy_pool.length) {
+    console.log(
+      PRE,
+      $T(),
+      'ERROR: Duplicate port indices in pool! This should not happen!'
+    );
+    console.log(PRE, $T(), 'Pool:', m_proxy_pool);
+  }
   return result;
 }
-/**
- *
- * @param {integer} index -- Port index to return to the pool
+/// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+/** Returns the port index to the pool
+ *  @param {integer} index - Port index to return to the pool
  */
 function ReleasePort(index) {
-  if (port_pool.find(port => port === index))
-    throw 'ERROR: Port already in pool! This should not happen! ' + index;
-  port_pool.push(index);
+  if (m_proxy_pool.find(port => port === index)) {
+    console.log(
+      PRE,
+      $T(),
+      'ERROR: Port already in pool! This should not happen!',
+      index
+    );
+    // throw 'ERROR: Port already in pool! This should not happen! ' + index;
+  }
+  m_proxy_pool.push(index);
 }
-/**
- * Returns true if there are no more port indices left in the pool
- * Used by /graph/<db>/ route to check if it should spawn a new app
+/// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+/** Returns true if there are no more port indices left in the pool
+ *  Used by /graph/<db>/ route to check if it should spawn a new app
  */
 function PortPoolIsEmpty() {
-  return port_pool.length < 1;
+  return m_proxy_pool.length < 1;
 }
 
-///////////////////////////////////////////////////////////////////////////////
-//
-//  RENDERERS
-
+/// RENDERERS /////////////////////////////////////////////////////////////////
+/// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 const logoHtml =
   '<h1><img src="/images/netcreate-logo.svg" alt="NetCreate Logo" width="100px"> Multiplex</h1>';
-
+/// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 function RenderLoginForm() {
   return `
       <form action="/authorize" method="post">
@@ -358,6 +301,7 @@ function RenderLoginForm() {
       </form>
 `;
 }
+/// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 function RenderManager() {
   let response = logoHtml;
   response += `<script>
@@ -383,22 +327,22 @@ function RenderManager() {
   response += `<p>Updated: ${new Date().toLocaleTimeString()}</p >`;
   return response;
 }
-
-/**
- * Returns a list of databases in the runtime folder
- * formatted as HTML <LI>s, with a link to open each graph.
+/// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+/** Returns a list of databases in the runtime folder
+ *  formatted as HTML <LI>s, with a link to open each graph.
  */
 function RenderDatabaseList() {
   let response = '<ul>';
   let dbs = NCUTILS.GetDatabaseNamesArray();
   dbs.forEach(db => {
     // Don't list dbs that are already open
-    if (!DBIsRunning(db)) response += `<li><a href="/graph/${db}/">${db}</a></li>`;
+    if (!m_DatabaseIsRunning(db))
+      response += `<li><a target="_blank" href="/graph/${db}/">${db}</a></li>`;
   });
   response += `</ul>`;
   return response;
 }
-
+/// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 function RenderActiveGraphsList() {
   let response = `<div class="box">`;
   response += `<h3>Active Graphs</h3>
@@ -410,7 +354,7 @@ function RenderActiveGraphsList() {
       </thead>
       <tbody>
   `;
-  childProcesses.forEach((route, index) => {
+  m_child_processes.forEach((route, index) => {
     if (index < 1) return; // Don't list the BASE database
     let kill = `<a href="/kill/${route.db}/">stop</a>`;
     response += `
@@ -421,14 +365,14 @@ function RenderActiveGraphsList() {
   });
   response += `</tbody></table>`;
   response += `<p>Number of Active Graphs: ${
-    childProcesses.length - 1
+    m_child_processes.length - 1
   } / ${PROCESS_MAX} (max)`;
   response += `<p>Reload browser to refresh Active Graphs.</p>`;
   response += `<p>"Stop" active graphs if you're not using them anymore.<br/>(Closing the window does not stop the graph.)</p>`;
   response += `</div>`;
   return response;
 }
-
+/// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 function RenderSavedGraphsList() {
   let response = `<div class="box">`;
   response += `<h3>Saved Graphs</h3>`;
@@ -437,7 +381,7 @@ function RenderSavedGraphsList() {
   response += `</div>`;
   return response;
 }
-
+/// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 function RenderNewGraphForm() {
   return `
     <div class="box">
@@ -470,7 +414,7 @@ function RenderNewGraphForm() {
       </label>
    </div>`;
 }
-
+/// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 function RenderGenerateTokensForm() {
   let response = `<div class="box">`;
   let dbnames = NCUTILS.GetDatabaseNamesArray().reduce(
@@ -507,87 +451,88 @@ function RenderGenerateTokensForm() {
   response += `</div>`;
   return response;
 }
-
+/// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 function RenderMemoryReport() {
-  const mem = process.memoryUsage();
-  let response = `<p>MEMORY :: Used:
-    ${numberWithCommas(Math.trunc(mem.heapUsed / 1024))}mb /
-    ${numberWithCommas(mem.heapTotal / 1024)}mb
-    (${(100 * (mem.heapUsed / mem.heapTotal)).toFixed(2)}%) `;
-  response += ` :: Remaining: ${numberWithCommas(
-    Math.trunc((mem.heapTotal - mem.heapUsed) / 1024)
-  )}mb`;
-  response += ` :: Out of memory: ${OutOfMemory()}</p>`;
+  const mem = m_MemoryReport();
+  const { unit, heapUsed, heapTotal, heapPercent, heapBuffer, pids } = mem;
+  const { sysTotalGB, sysFreeGB } = mem;
+
+  let response = `<p>MEMORY`;
+  response += ` :: Used: ${heapUsed}${unit} / ${heapTotal}${unit} (${heapPercent}%) `;
+  response += ` :: Remaining: ${heapBuffer}${unit}`;
+  response += ` :: LowMem: ${OutOfMemory()}</p>`;
+  const psOut = m_GetInstancePIDs();
+  response += `<pre>DETECTED LAUNCH INSTANCES\n${psOut}</pre>`;
   return response;
 }
 
-///////////////////////////////////////////////////////////////////////////////
-//
-//  PROCESS MANAGERS
-
-/**
- * Use this to spawn a new node instance
- * Calls PromiseApp.
- *
- * @param {string} db
- * @return {integer} port to be used by router function
+/// PROCESS MANAGERS //////////////////////////////////////////////////////////
+/// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+/** API: Use this to spawn a new node instance via m_PromiseApp.
+ *  @param {string} db - dataset name
+ *  @return {integer} port to be used by router function
  *         in app.use(`/graph/:graph/:file`...).
  */
 async function SpawnApp(db) {
   try {
-    const newProcessDef = await PromiseApp(db);
+    const newProcessDef = await m_PromiseApp(db);
     AddChildProcess(newProcessDef);
+    SaveProcessState();
     return newProcessDef.port;
   } catch (err) {
     console.error(PRE + 'SpawnApp Failed with error', err);
   }
 }
-
-/**
- * Promises a new node NetCreate application process
+/// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+/** UTILITY: Promises a new node NetCreate application process. This forks
+ *  `nc-launch-instance.jssh`.
  *
- * In general, don't call this directly.  Use SpawnApp.
+ *  To initiate the launch process, m_PromiseApp() uses process.send to
+ *  supply the parameters necessary to write its netcreate-config.js file
+ *  and start the server using the supplied ports.
  *
- * This starts `nc-start.js` via a fork.
- * `nc-start.js` will generate the `netcreate-config.js`
- * configuration file, and then start the brunch server.
+ *  After the server has launched, the child process sends a message back
+ *  to report success or faiure.
  *
- * When `nc-start.js` has completed, it sends a message back
- * via fork messaging, at which point this promise is resolved
- * and then we redirect the user to the new port.
- *
- * @param {string} db
+ * @param {string} db - dataset name to use
  * @resolve {object} sends the forked process and meta info
- *
  */
-function PromiseApp(db) {
+function m_PromiseApp(db) {
   return new Promise((resolve, reject) => {
     const ports = PickPort();
     if (ports === undefined) {
-      reject(`Unable to find a free port.  ${db} not created.`);
+      reject(`Unable to find a free port. ${db} not created.`);
     }
-
+    const { index, appport, netport } = ports;
     // 1. Define the fork
-    const forked = fork('./nc-launch-instance.js');
-
+    const info = `${db}:${index}/${appport}/${netport}`; // ignored by launcher
+    const forked = fork('./nc-launch-instance.jssh', [info]);
     // 2. Define fork success handler
     //    When the child node process is up and running, it will
     //    send a message back to this handler, which in turn
     //    sends the new spec back to SpawnApp
     forked.on('message', msg => {
-      console.log(PRE, $T(), 'Received message from spawned fork:', msg);
-      console.log(PRE);
-      console.log(PRE, $T(), `${db} STARTED!`);
-      console.log(PRE);
-      const newProcessDef = {
-        db,
-        port: ports.appport,
-        netport: ports.netport,
-        portindex: ports.index,
-        googlea: googlea,
-        process: forked
-      };
-      resolve(newProcessDef); // pass to SpawnApp
+      const { event } = msg;
+      if (event === 'SUCCESS') {
+        console.log(
+          PRE,
+          $T(),
+          `${CYN}instance confirmed '${db}' has launched (port ${appport})`,
+          RST
+        );
+        const newProcessDef = {
+          db,
+          port: ports.appport,
+          netport: ports.netport,
+          portindex: ports.index,
+          GOOGLEA: GOOGLEA,
+          process: forked
+        };
+        resolve(newProcessDef); // pass to SpawnApp
+      } else {
+        console.log(PRE, `${RED}instance '${db}' failed to start`, RST);
+        reject(`Failed to start instance '${db}'`);
+      }
     });
 
     // 3. Send message to start fork
@@ -599,65 +544,229 @@ function PromiseApp(db) {
       port: ports.appport,
       netport: ports.netport,
       process: forked,
-      ip,
-      googlea
+      IP,
+      GOOGLEA
     };
+    console.log(
+      PRE,
+      `initializing launch of '${db}' on port:${ports.appport} netport:${ports.netport}`
+    );
     forked.send(ncStartParams);
   });
 }
-
-/**
- * Add the newProcess to the array of childProcesses
- * but only if it doesn't already exist
- * @param {object} route
+/// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+/** Add the newProcess to the array of m_child_processes
+ *  but only if it doesn't already exist
+ *  @param {object} route
  */
 function AddChildProcess(newProcess) {
-  if (childProcesses.find(route => route.db === newProcess.db)) return;
-  childProcesses.push(newProcess);
+  if (m_child_processes.find(route => route.db === newProcess.db)) return;
+  m_child_processes.push(newProcess);
+}
+/// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+/** Save the Process Datastructures from m_child_processes and m_proxy_pool
+ * to a file.  This is used to save the state of the multiplex server */
+function SaveProcessState() {
+  const process_entries = m_child_processes.map(route => {
+    return {
+      db: route.db,
+      port: route.port,
+      netport: route.netport,
+      portindex: route.portindex
+    };
+  });
+  const ncmState = {
+    child_processes: process_entries,
+    proxy_pool: m_proxy_pool
+  };
+  fs.writeFileSync('.nc-process-state.json', JSON.stringify(ncmState));
+}
+/// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+/** Restore Process Datastructures, bypassing the m_PromiseApp() process
+ *  Duplicated much of m_PromiseApp()
+ */
+async function LoadProcessState(child_processes, proxy_pool) {
+  console.log(PRE, `${GRNR} <<< RESTORING DATASETS <<< ${RST}`);
+  for (route of child_processes) {
+    const { db, port, netport, portindex } = route;
+    const info = `${db}:${port}/${netport}`;
+    console.log(PRE, `${GRN}<<< restarting '${db}' on ${info} ${RST}`);
+    await new Promise((resolve, reject) => {
+      const forked = fork('./nc-launch-instance.jssh', [info]);
+      // define success handler
+      forked.on('message', msg => {
+        const { event } = msg;
+        if (event === 'SUCCESS') {
+          console.log(PRE, $T(), `${GRN}<<< RESTORED '${db}' on (port ${port})`, RST);
+          route.process = forked;
+          resolve();
+        } else {
+          console.log(PRE, `${RED}<<< RESTORE '${db}' failed`, RST);
+          reject(`Failed to restart instance '${db}'`);
+        }
+      }); // end forked.on
+      const ncStartParams = {
+        db,
+        port,
+        netport,
+        portindex,
+        GOOGLEA: GOOGLEA,
+        process: forked
+      };
+      forked.send(ncStartParams);
+    }); // end promise
+  } // end for
+  m_proxy_pool = proxy_pool;
+  m_child_processes = child_processes;
 }
 
-/**
- * Used to check if we have enough memory to start a new node process
- * This is used to prevent node from starting too many processes.
+/// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+/** Used to check if we have enough memory to start a new node process
+ *  This is used to prevent node from starting too many processes.
  */
 function OutOfMemory() {
-  let mem = process.memoryUsage();
-  return mem.heapTotal / 1024 - mem.heapUsed / 1024 < MEMORY_MIN;
+  let free = os.freemem() / 1024; // mb
+  return free < MEMORY_MIN;
 }
 
-///////////////////////////////////////////////////////////////////////////////
-//
-//  HTTP-PROXY-MIDDLEWARE ROUTING
-//
+/*///////////////////////////// RUNTIME START \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\*\
 
-// ----------------------------------------------------------------------------
-// INIT
-console.log(`\n\n\n`)
-console.log(PRE, $T(), 'STARTED!');
+
+  Start of Server Execution on Module Load
+  - emit console header timestamp
+  - check .nvmrc and node version
+  - detect home page availability
+  - read management password from SESAME file
+
+
+\*\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\ * /////////////////////////////////////*/
+
+/// RUNTIME: START LOGGING OUTPUT /////////////////////////////////////////////
+/// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+console.log(`\n\n\n`);
+console.log('-'.repeat(80));
+console.log(PRE, 'nc-multiplex started:', $T());
 console.log(PRE);
 
+/// RUNTIME: CHECK FOR BASE REPO //////////////////////////////////////////////
+/// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+const { primary, count } = ScanForRepos();
+if (primary === undefined) {
+  console.log(PRE, `${RED}ERROR: no primary NetCreate repo found${RST}`);
+  console.log(SPC, `Make sure you installed a repo to launch from.`);
+  console.log(SPC, `See ${WARN}ReadMe.md${RST} for details.`);
+  process.exit(1);
+}
+if (count === 1) {
+  console.log(PRE, `reference subrepo: ${primary.repo}`);
+} else {
+  console.log(
+    PRE,
+    `${WARN}WARNING: multiple NetCreate repos (${count}) found${RST}`
+  );
+  console.log(SPC, `defaulting to ${WARN}${primary.repo}${RST}`);
+}
+
+
+/// RUNTIME: CHECK NODE VERSION ///////////////////////////////////////////////
+/// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+try {
+  NVMRC = fs.readFileSync('./.nvmrc', 'utf8').trim();
+} catch (err) {
+  console.error('could not read .nvmrc', err);
+  throw Error(`Could not read .nvmrc ${err}`);
+}
+exec('node --version', (error, stdout, stderr) => {
+  if (stdout) {
+    stdout = stdout.trim();
+    if (stdout !== NVMRC) {
+      console.log('\x1b[97;41m');
+      console.log(PRE, '*** NODE VERSION MISMATCH ***');
+      console.log(PRE, '.. expected', NVMRC, 'got', stdout);
+      console.log(PRE, '.. did you remember to run nvm use?\x1b[0m');
+      console.log('');
+    }
+    console.log(PRE, 'NODE VERSION:', stdout, 'OK');
+  }
+});
+
+/// RUNTIME: DETECT CUSTOM HOME PAGE //////////////////////////////////////////
+/// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+try {
+  fs.accessSync('home.html', fs.constants.R_OK);
+  HOMEPAGE_EXISTS = true;
+} catch (err) {
+  // no home page, use default
+  HOMEPAGE_EXISTS = false;
+}
+
+/// RUNTIME: SET PASSWORD /////////////////////////////////////////////////////
+/// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+/// If 'SESAME' file exists, use the password in there instead of default
+try {
+  let sesame = fs.readFileSync('SESAME', 'utf8');
+  PASSWORD = sesame;
+} catch (err) {
+  PASSWORD = DEFAULT_PASSWORD; // no password, use default
+}
+PASSWORD_HASH = GetHash(PASSWORD);
+
+/// RUNTIME: START HEARTBEAT TIMER ///////////////////////////////////////////////
+/// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+m_MemLog();
+setInterval(m_MemLog, HEARTBEAT * 60 * 1000); // log memory usage every X minutes
+
+/// EXPRESS CONFIGURATION /////////////////////////////////////////////////////
+/// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 // START BASE APP
 // This is needed to handle static file requests.
 // Most imports/requires do not specify the db route /graph/dbname/
 // so we need to provide a base app that responds to those static file
 // requests.  This starts a generic "base" dataset at port 3000.
-SpawnApp('base');
 
-// ----------------------------------------------------------------------------
-// ROUTE FUNCTIONS
+const app = express();
+app.use(express.urlencoded({ extended: true }));
+app.use(cookieParser());
 
-/**
- * RouterGraph
- * @param {object} req
- *
- * The router function tries to route to the correct port by:
- * a) if process is already running, use existing port
- * b) if the process isn't running, spawn a new process
- *    and pass the port
- * c) if no more ports are available, redirect back to the root.
- *
+/// EXPRESS DATA ACCESS ROUTES ////////////////////////////////////////////////
+/// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+/** HANDLE /graph/:graph/netcreate-config.js
+ *  The config file needs to be dynamically served for each node instance,
+ *  otherwise they would share (and clobber) the same static file.
+ *  This route has to go before /graph/:graph/:file? below
  */
-async function RouterGraph(req) {
+app.get(`/graph/:graph/${NC_URL_CONFIG}`, (req, res) => {
+  const db = req.params.graph;
+  let response = '';
+  const child = m_child_processes.find(child => child.db === db);
+  if (child) {
+    console.log(
+      PRE,
+      $T(),
+      `GET /graph/${child.db}/${NC_URL_CONFIG} (client ${req.ip})`
+    );
+    response += NCUTILS.GetNCConfig(child);
+  } else {
+    console.log(PRE, $T(), 'no graph-specific netcreate-config.js found for', db);
+    response += 'ERROR: No database found to netcreate-config.js: ' + db;
+  }
+  res.set('Content-Type', 'application/javascript');
+  res.send(response);
+});
+
+/// PROXY GRAPH REDIRECT //////////////////////////////////////////////////////
+/// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+/** CONFIG FUNCTION: m_RouterLogic used by http-proxy-middleware to route to
+ *  the correct port
+ *  @param {Express.Request} req The router function tries to route to the
+ *  correct port and path, checking whether it already exists. If flags allow,
+ *  it will spawn a new process if able to.
+ */
+async function m_RouterLogic(req) {
+  if (req.params === undefined) {
+    console.log(PRE, $T(), 'ERROR in m_RouterLogic: req.params is undefined');
+    console.log(PRE, $T(), 'req.ip:', req.ip);
+  }
   const db = req.params.graph;
   let port;
   let path = '';
@@ -667,193 +776,243 @@ async function RouterGraph(req) {
   if (CookieIsValid(req)) {
     ALLOW_SPAWN = true;
   }
-
   // Is it already running?
-  let route = childProcesses.find(route => route.db === db);
+  let route = m_child_processes.find(route => route.db === db);
   if (route) {
     // a) Yes. Use existing route!
-    console.log(PRE + $T() + '--> mapping to ', route.db, route.port);
+    console.log(
+      PRE,
+      $T(),
+      `>>> proxying request /graph/${route.db}:80 to :${route.port} (client ${req.ip})`
+    );
     port = route.port;
   } else if (PortPoolIsEmpty()) {
-    console.log(PRE + $T() + '--> No more ports.  Not spawning', db);
     // b) No more ports available.
+    console.log(PRE, $T(), '!!! no more ports. Not spawning', db);
     path = `/error_out_of_ports`;
   } else if (OutOfMemory()) {
     // c) Not enough memory to spawn new node instance
+    console.log(PRE, $T(), '!!! out of memory. Not spawning', db);
     path = `/error_out_of_memory`;
-  } else if (ALLOW_NEW || ALLOW_SPAWN) {
+  } else if (AUTO_NEW || ALLOW_SPAWN) {
     // c) Not defined yet, Create a new one.
-    console.log(PRE + $T() + '--> not running yet, starting new', db);
+    let reason = ALLOW_SPAWN ? 'spawn=true ' : 'spawn=false ';
+    reason += AUTO_NEW ? 'new=true' : 'new=false';
+    console.log(PRE, $T(), `*** auto spawning (${reason})`, db);
     port = await SpawnApp(db);
   } else {
-    // c) Not defined yet.  Report error.
-    path = `/error_no_database`;
+    // c) Not defined or running, and not allowed to spawn
+    console.log(
+      PRE,
+      $T(),
+      `!!! /graph/${db} not allowed to spawn (AUTO_NEW=ALOW_SPAWN=false)`
+    );
+    path = `/error_no_database?graph=${db}`;
   }
   return {
     protocol: 'http:',
     host: 'localhost',
     port: port,
-    path: path
+    path: path // if path is empty, it will be ignored
   };
 }
-
-// ----------------------------------------------------------------------------
-// ROUTES
-
-// HANDLE `/graph/:graph/netcreate-config.js`
-//
-// The config file needs to be dynamically served for each node instance,
-// otherwise they would share (and clobber) the same static file.
-//
-// This has to go before `/graph/:graph/:file?` or it won't get triggered
-//
-app.get(`/graph/:graph/${NC_URL_CONFIG}`, (req, res) => {
-  const db = req.params.graph;
-  let response = '';
-  console.log('############ returning netcreate-config.js for', db);
-  const child = childProcesses.find(child => child.db === db);
-  if (child) {
-    response += NCUTILS.GetNCConfig(child);
-  } else {
-    response += 'ERROR: No database found to netcreate-config.js: ' + db;
+/// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+/** CONFIG FUNCTION: m_ProxyFilter nominally rewrites the /graph/{db} to
+ *  localhost:{port}, but it also contains some debug code to detect if
+ *  req.params is undefined as we have seen this on our servers and are trying
+ *  to log the conditions when this happens.
+ *  @param {string} rpath - route to check (remainder after any params)
+ *  @param {Express.Request} req - request object
+ */
+function m_ProxyFilter(rpath, req) {
+  // sri debug detect if req.params is undefined
+  if (req === undefined) {
+    console.log(PRE, $T(), `??? USE ${route} req is undefined`);
+    return false;
   }
-  res.set('Content-Type', 'application/javascript');
-  res.send(response);
-});
-
-// HANDLE `/graph/:graph/:file?`
-//
-// * `:file` is optional.  It catches db-specific file requests,
-//   for example, the`netcreate-config.js` request.
-// * If there's a missing trailing "/", the URL is malformed
-//
-app.use(
-  '/graph/:graph/:file?',
-  createProxyMiddleware(
-    (pathname, req) => {
-      // only match if there is a trailing '/'
-      if (req.params.file) return true; // legit file
-      if (req.params.graph && req.originalUrl.endsWith('/')) return true; // legit graph
-      return false;
-    },
-    {
-      router: RouterGraph,
-      pathRewrite: function (path, req) {
-        // remove '/graph/db/' for the rerouted calls
-        // e.g. localhost/graph/hawaii/#/edit/mop => localhost:3000/#/edit/mop
-        return (rewrite = path.replace(`/graph/${req.params.graph}`, ''));
-      },
-      target: `http://localhost:3000`, // default fallback, router takes precedence
-      ws: true,
-      changeOrigin: true
+  // detect if this is a websocket connection
+  if (req.headers && req.headers.upgrade) {
+    const { upgrade } = req.headers;
+    if (typeof upgrade === 'string' && upgrade.toLowerCase() === 'websocket') {
+      const ip = req.headers['x-forwarded-for'] || req.connection.remoteAddress;
+      console.log(
+        PRE,
+        $T(),
+        `${WARN}??? USE ${rpath} is a websocket connection attempt from ${ip}`,
+        RST
+      );
     }
-  )
-);
-
-// -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -
-// ERROR HANDLERS
-
-function SendErrorResponse(res, msg) {
-  res.set('Content-Type', 'text/html');
-  res.send(
-    `<p>${msg}</p>
-    <p><a href="/">Back to Multiplex</a></p>`
-  );
+  }
+  if (req.params === undefined) {
+    console.log(PRE, $T(), `${WARN}??? USE ${rpath} req.params is undefined`, RST);
+    return false;
+  }
+  // pass if there is a file
+  // (srinote: this param only contains the first segment, which may be a bug)
+  if (req.params.file) return true; // only first segment of path (bug?)
+  // pass if there is a trailing '/'
+  if (req.params.graph && req.originalUrl.endsWith('/')) return true; // legit graph
+  return false;
 }
+/// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+/** CONFIG FUNCTION: m_ProxyRewrite rewrites the path to remove the /graph/db/
+ *  prefix, used to reroute the calls to the correct port in the main proxy
+ *  middleware for /graph/dbname/ requests.
+ */
+function m_ProxyRewrite(rpath, req) {
+  // remove '/graph/db/' for the rerouted calls
+  // e.g. localhost/graph/hawaii/#/edit/mop => localhost:3000/#/edit/mop
 
-// HANDLE NO DATABASE -- RETURN ERROR
+  const fullPath = req.originalUrl;
+  if (req.originalUrl === undefined) {
+    console.log(PRE, $T(), '??? ProxyRewrite req.originalUrl is undefined');
+    return rpath;
+  }
+
+  /*/ srinote: in hpm 3, path is the remainder after the /graph/db/ prefix
+      instead of the full path as before, so use req.originalUrl instead
+  /*/
+
+  // const rewrite = rpath.replace(`/graph/${req.params.graph}`, '');
+  const rewrite = fullPath.replace(`/graph/${req.params.graph}/`, '/');
+  return rewrite;
+}
+/// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+/** MAIN HANDLER /graph/:graph/:file?
+ *  The intention is to proxy file requests from /graph/dbname/filename
+ *  to localhost:3000/filename (e.g. `netcreate-config.js` requests).
+ */
+const proxy = createProxyMiddleware({
+  // this is the actual proxy setup object
+  router: m_RouterLogic,
+  pathFilter: m_ProxyFilter,
+  pathRewrite: m_ProxyRewrite,
+  target: `http://localhost:3000`, // default fallback, router takes precedence
+  ws: true,
+  changeOrigin: true,
+  on: {
+    error: (err, req, res, target) => {
+      console.log(PRE, $T(), '??? Proxy Error:', err);
+      if (res.writeHead && !res.headersSent) {
+        res.writeHead(500, {
+          'Content-Type': 'text/plain'
+        });
+      }
+      res.end('Something went wrong with the proxy.');
+    },
+    close: (proxyRes, proxySocket, proxyHead) => {
+      console.log(PRE, $T(), '??? Proxy client closed');
+    }
+  }
+});
+app.use('/graph/:graph/:file?', proxy);
+
+/// EXPRESS ERROR ROUTES //////////////////////////////////////////////////////
+/// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+/// HANDLE NO DATABASE -- RETURN ERROR
 app.get('/error_no_database', (req, res) => {
-  console.log(PRE + $T() + '================== Handling ERROR NO DATABASE!');
-  SendErrorResponse(res, 'This graph is not currently open.');
+  // get the ?graph value the query string
+  let db = '';
+  if (req.query && req.query.graph) db = req.query.graph;
+  // overblown pretty-print formating
+  if (db.endsWith('/')) db = db.slice(0, -1);
+  db = db.length > 0 ? ` '${db}' ` : ' ';
+  m_SendErrorResponse(res, `Requested graph${db}is not currently open`);
 });
-
-// HANDLE NOT AUTHORIZED -- RETURN ERROR
+/// HANDLE NOT AUTHORIZED -- RETURN ERROR
 app.get('/error_not_authorized', (req, res) => {
-  console.log(PRE + $T() + '================== Handling ERROR NOT AUTHORIZED!');
-  SendErrorResponse(res, 'Not Authorized.');
+  m_SendErrorResponse(res, 'Not Authorized.');
 });
-
-// HANDLE OUT OF PORTS -- RETURN ERROR
+/// HANDLE OUT OF PORTS -- RETURN ERROR
 app.get('/error_out_of_ports', (req, res) => {
-  console.log(PRE + $T() + '================== Handling ERROR OUT OF PORTS!');
-  SendErrorResponse(res, "Ran out of ports.  Can't start the graph.");
+  m_SendErrorResponse(res, "Ran out of ports.  Can't start the graph.");
 });
-
-// HANDLE OUT OF MEMORY -- RETURN ERROR
+/// HANDLE OUT OF MEMORY -- RETURN ERROR
 app.get('/error_out_of_memory', (req, res) => {
-  console.log(PRE + $T() + '================== Handling ERROR OUT OF MEMORY!');
-  SendErrorResponse(res, "Ran out of Memory.  Can't start the graph.");
+  m_SendErrorResponse(res, "Ran out of Memory.  Can't start the graph.");
 });
-
-// HANDLE MISSING TRAILING ".../" -- RETURN ERROR
+/// HANDLE MISSING TRAILING ".../" -- RETURN ERROR
 app.get('/graph/:file', (req, res) => {
-  console.log(PRE + $T() + '================== Handling BAD URL!');
-  SendErrorResponse(res, "Bad URL. Missing trailing '/'.");
+  m_SendErrorResponse(res, "Bad URL. Missing trailing '/'.");
 });
 
-// -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -
-// UTILITIES
-
+// EXPRESS UTILITY ROUTES /////////////////////////////////////////////////////
+/// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 // HANDLE "/kill/:graph" -- KILL REQUEST
 app.get('/kill/:graph/', (req, res) => {
-  console.log(PRE + $T() + '================== Handling / KILL!');
-  const db = req.params.graph;
+  if (req.params === undefined) {
+    console.log(PRE, $T(), 'ERROR: req.params is undefined for /kill/:graph/');
+    const fullUrl = req.protocol + '://' + req.get('host') + req.originalUrl;
+    console.log(PRE, `error url: ${fullUrl}`);
+    console.log(PRE, `client ip: ${req.ip}`);
+    return;
+  }
+  const db = req.params ? req.params.graph : '';
+  console.log(PRE, $T(), `GET /kill/${db} (client ${req.ip})`);
   res.set('Content-Type', 'text/html');
   let response = `<h1>NetCreate Manager</h1>`;
-  const child = childProcesses.find(child => child.db === db);
+
+  const child = m_child_processes.find(child => child.db === db);
   if (child) {
     try {
       child.process.kill();
       // Return the port index to the pool
       ReleasePort(child.portindex);
-      // Remove child from childProcesses
-      childProcesses = childProcesses.filter(child => child.db !== db);
-      response += `<p>Process ${db} killed.`;
+      // Remove child from m_child_processes
+      m_child_processes = m_child_processes.filter(child => child.db !== db);
+      SaveProcessState(); // save state after updating process data structure
+      console.log(PRE, $T(), `/kill/${db} process killed`);
+      response += `<p>Process ${db} killed.</p>`;
     } catch (e) {
+      console.log(PRE, $T(), `/kill/${db} process failed with ${e}`);
       response += `<p>ERROR while trying to kill ${db}</p>`;
       response += `<p>${e}</p>`;
     }
   } else {
+    console.log(PRE, $T(), `/kill/${db} database not found`);
     response += 'ERROR: No database found to kill: ' + db;
   }
-  response += `<p><a href="/">Back to Multiplex</a></p>`;
-
+  response += `<p><a href="/manage">Back to Multiplex Manager</a></p>`;
   res.send(response);
 });
-
-// HANDLE "/maketoken" -- GENERATE TOKENS
+/// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+/// HANDLE "/maketoken" -- GENERATE TOKENS
 app.get('/maketoken/:clsid/:projid/:dataset/:numgroups', (req, res) => {
-  console.log(PRE + $T() + '================== Handling / MAKE TOKEN!');
   const { clsid, projid, dataset, numgroups } = req.params;
+  console.log(
+    PRE,
+    $T(),
+    'maketoken GET on /maketoken',
+    clsid,
+    projid,
+    dataset,
+    numgroups
+  );
   let response = MakeToken(clsid, projid, dataset, parseInt(numgroups));
   res.set('Content-Type', 'text/html');
   res.send(response);
 });
 
-// -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -
-// MANAGE
-//
-// Authentication
-//
-// Authentication uses a cookie with a hashed password.
-// The cookie expires after AUTH_MINUTES
-//
-// 1. /manage initially redirects to /login
-// 2. On the /login form, the administrator enters a password
-// 3. /login POSTS to /authorize
-// 4. /authorize checks the password against the PASSWORD
-//    If there's no match, the user is redirected to /error_not_authorized
-// 5. /authorize then sets a cookie with the PASSWORD_HASH and
-//    the user is redirected to /manage
-// 6. /manage checks the cookie against the PASSWORD_HASH
-//    If the cookie matches, the manage page is displayed
-//    If the cookie doesn't match, the user is redirected back to /login
-// 7. The cookie expires after AUTH_MINUTES
-//
+/// EXPRESS MANAGEMENT ROUTES //////////////////////////////////////////////////
+/* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - *\
+  Authentication uses a cookie with a hashed password.
+  The cookie expires after AUTH_MINUTES
 
-// HANDLE "/manage" -- MANAGER PAGE
+  1. /manage initially redirects to /login
+  2. On the /login form, the administrator enters a password
+  3. /login POSTS to /authorize
+  4. /authorize checks the password against the PASSWORD
+      If there's no match, the user is redirected to /error_not_authorized
+  5. /authorize then sets a cookie with the PASSWORD_HASH and
+    the user is redirected to /manage
+  6. /manage checks the cookie against the PASSWORD_HASH
+    If the cookie matches, the manage page is displayed
+    If the cookie doesn't match, the user is redirected back to /login
+  7. The cookie expires after AUTH_MINUTES
+/* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
+/// HANDLE MANAGER PAGE
 app.get('/manage', (req, res) => {
-  console.log(PRE + $T() + '================== Handling / MANAGE!');
+  console.log(PRE, $T(), `GET /manage (client ${req.ip})`);
   if (CookieIsValid(req)) {
     res.set('Content-Type', 'text/html');
     res.send(RenderManager());
@@ -861,9 +1020,9 @@ app.get('/manage', (req, res) => {
     res.redirect(`/login`);
   }
 });
-
+/// 2. redirected from /manage
 app.get('/login', (req, res) => {
-  console.log(PRE + $T() + '================== Handling / LOGIN!');
+  console.log(PRE, $T(), `GET /login (client ${req.ip})`);
   if (CookieIsValid(req)) {
     // Cookie already set, no need to log in, redirect to manage
     res.redirect(`/manage`);
@@ -873,9 +1032,9 @@ app.get('/login', (req, res) => {
     res.send(logoHtml + RenderLoginForm());
   }
 });
-
+/// 3. post from Login Form
 app.post('/authorize', (req, res) => {
-  console.log(PRE + $T() + '================== Handling / AUTHORIZE!');
+  console.log(PRE, $T(), `POST /authorize (client ${req.ip})`);
   let str = new String(req.body.password);
   if (req.body.password === PASSWORD) {
     res.cookie('nc-multiplex-auth', PASSWORD_HASH, {
@@ -887,15 +1046,16 @@ app.post('/authorize', (req, res) => {
   }
 });
 
-// -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -
-// HOME
-
-// HANDLE "/" -- HOME PAGE
+/// EXPRESS HOME PAGE ROUTES //////////////////////////////////////////////////
+/// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+/// HANDLE "/" -- HOME PAGE
 app.get('/', (req, res) => {
-  console.log(PRE + $T() + '================== Handling / ROOT!');
+  console.log(PRE, $T(), `GET / (client ${req.ip})`);
   if (HOMEPAGE_EXISTS) {
+    console.log(PRE, '.. sending home.html');
     res.sendFile(path.join(__dirname, 'home.html'));
   } else {
+    console.log(PRE, '.. no home.html, sending default');
     res.set('Content-Type', 'text/html');
     let response = logoHtml;
     response += `<p>Please contact Professor Kalani Craig, Institute for Digital Arts & Humanities at (812) 856-5721 (BH) or craigkl@indiana.edu with questions or concerns and/or to request information contained on this website in an accessible format.</p>`;
@@ -903,43 +1063,85 @@ app.get('/', (req, res) => {
   }
 });
 
-// -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -  -
-// HANDLE STATIC FILES
-//
-// Route Everything else to :3000
-// :3000 is a "BASE" app that is actually a full NetCreate app
-// but it does nothing but serve static files.
-//
-// This is necessary to catch static page requests that do not have
-// parameters, such as imports, requires, .js, .css, etc.
-//
-// This HAS to come LAST!
-//
+/// EXPRESS STATIC FILE ROUTES /////////////////////////////////////////////////
+/// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+/** Route Everything else to :3000
+ *  :3000 is a "BASE" app that is actually a full NetCreate app
+ *  but it does nothing but serve static files.
+ *
+ *  This is necessary to catch static page requests that do not have
+ *  parameters, such as imports, requires, .js, .css, etc.
+ *
+ *  This HAS to be the last route!
+ */
 app.use(
-  createProxyMiddleware('/', {
+  '/',
+  createProxyMiddleware({
     target: `http://localhost:3000`,
     ws: true,
     changeOrigin: true
   })
 );
 
-// ----------------------------------------------------------------------------
+/// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+/** REQUEST PARAMETERS REFERENCE
+ *
+    console.log(`\n\nREQUEST: ${req.originalUrl}`)
+    console.log("...pathname", pathname);               // `/hawaii/`
+    console.log("...req.path", req.path);               // '/'
+    console.log("...req.baseUrl", req.baseUrl);         // '/hawaii'
+    console.log("...req.originalUrl", req.originalUrl); // '/hawaii/'
+    console.log("...req.params", req.params);           // '{}'
+    console.log("...req.query", req.query);             // '{}'
+    console.log("...req.route", req.route);             // undefined
+    console.log("...req.hostname", req.hostname);       // 'sub.localhost'
+    console.log("...req.subdomains", req.subdomains);   // []
+**/
 
-// `request` parameters reference
-//
-// console.log(`\n\nREQUEST: ${req.originalUrl}`)
-// console.log("...pathname", pathname);               // `/hawaii/`
-// console.log("...req.path", req.path);               // '/'
-// console.log("...req.baseUrl", req.baseUrl);         // '/hawaii'
-// console.log("...req.originalUrl", req.originalUrl); // '/hawaii/'
-// console.log("...req.params", req.params);           // '{}'
-// console.log("...req.query", req.query);             // '{}'
-// console.log("...req.route", req.route);             // undefined
-// console.log("...req.hostname", req.hostname);       // 'sub.localhost'
-// console.log("...req.subdomains", req.subdomains);   // []
+/// EXPRESS START LISTENING ///////////////////////////////////////////////////
+/// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+app.listen(PORT_ROUTER, () => {
+  console.log(PRE, $T());
+  console.log(PRE, `NC-MULTIPLEX Express Server running on port ${PORT_ROUTER}.`);
 
-///////////////////////////////////////////////////////////////////////////////
-//
-//  START PROXY
+  // if .nc-process-state.json exists, read and parse it
+  if (!fs.existsSync('.nc-process-state.json')) {
+    console.log(PRE, 'No .nc-process-state.json found. Starting fresh.');
+    SpawnApp('base');
+    SaveProcessState();
+  } else {
+    try {
+      const text = fs.readFileSync('.nc-process-state.json', 'utf8');
+      const json = JSON.parse(text);
+      const { child_processes, proxy_pool } = json;
+      if (child_processes.length > 0) {
+        LoadProcessState(child_processes, proxy_pool);
+      } else {
+        SpawnApp('base');
+        SaveProcessState();
+      }
+    } catch (err) {
+      console.log(PRE, $T(), 'error loading .nc-process-state.json', err);
+      console.log(
+        PRE,
+        $T(),
+        'check contents of file, delete file, and restart manually'
+      );
+      process.exit(1);
+    }
+  }
+});
 
-app.listen(PORT_ROUTER, () => console.log(PRE, $T(), `running on port ${PORT_ROUTER}.`));
+/// PROCESS SIGNAL HANDLERS ///////////////////////////////////////////////////
+/// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+process.on('SIGINT', () => {
+  console.log(PRE, '*** SIGINT RECEIVED - EXITING ***');
+  console.log(PRE, 'nc-multiplex stopped via SIGINT:', $T());
+  process.exit(0);
+});
+/// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+process.on('SIGTERM', () => {
+  console.log(PRE, '*** SIGTERM RECEIVED - EXITING ***');
+  console.log(PRE, 'nc-multiplex stopped via SIGTERM:', $T());
+  process.exit(0);
+});
