@@ -326,9 +326,8 @@ function RenderManager() {
       let unit = 's';
       let out = '(' + remaining.toFixed(0) + unit + ' until auto logout)';
       if (remaining < 30) status.style.color = 'red';
-      if (remaining < 1) location.href='/login?expired';
-
-      status.innerHTML = out;
+      if (remaining < 0) location.href='/login?expired';
+      if (remaining >= 0) status.innerHTML = out;
     }, 1000);
   </script>`;
   response += `<div id="login" style="display: none">` + RenderLoginForm() + `</div>`;
