@@ -782,13 +782,20 @@ app.get(`/graph/:graph/${NC_URL_CONFIG}`, (req, res) => {
  *  it will spawn a new process if able to.
  */
 async function m_RouterLogic(req) {
+  let port;
+  let path = '';
+
+  // sri debug detect if req.params is undefined
   if (req.params === undefined) {
     console.log(PRE, $T(), 'ERROR in m_RouterLogic: req.params is undefined');
     console.log(PRE, $T(), 'req.ip:', req.ip);
+  } else if (req.params.graph === undefined) {
+    console.log(PRE, $T(), 'ERROR in m_RouterLogic: req.params.graph is undefined');
+    console.log(PRE, $T(), 'req.ip:', req.ip);
   }
-  const db = req.params.graph;
-  let port;
-  let path = '';
+
+  // if req.params.graph is unexpectedly undefined, use an unfindable graph name
+  const db = req.params.graph || '<undefined>';
 
   // Authenticate to allow spawning
   let ALLOW_SPAWN = false;

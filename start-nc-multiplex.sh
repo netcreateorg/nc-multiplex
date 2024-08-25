@@ -13,10 +13,10 @@
 # pm2 start [app]     # to start the process
 
 printf "starting nc-multiplex.js\n"
+printf "for pm2 usage: see script comments for command list\n"
 printf ".. browse to http://host:80/manage for control\n"
 printf ".. output is appended to log.txt\n"
 printf ".. press ctrl+c to stop.\n"
-printf "using pm2? commands are listed in script comments.\n"
 
 # start the node process (sri's version)
 node nc-multiplex >> log.txt 2>&1
