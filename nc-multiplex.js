@@ -795,7 +795,7 @@ async function m_RouterLogic(req) {
   }
 
   // if req.params.graph is unexpectedly undefined, use an unfindable graph name
-  const db = req.params.graph || '<undefined>';
+  const db = req.params ? req.params.graph || '<undefined>' : '<undefined>';
 
   // Authenticate to allow spawning
   let ALLOW_SPAWN = false;
