@@ -326,6 +326,7 @@ function RenderManager() {
       let unit = 's';
       let out = '(' + remaining.toFixed(0) + unit + ' until auto logout)';
       if (remaining < 30) status.style.color = 'red';
+      if (remaining < 0) location.reload();
       status.innerHTML = out;
     }, 1000);
   </script>`;
@@ -784,18 +785,23 @@ app.get(`/graph/:graph/${NC_URL_CONFIG}`, (req, res) => {
 async function m_RouterLogic(req) {
   let port;
   let path = '';
+  let db = '';
 
   // sri debug detect if req.params is undefined
-  if (req.params === undefined) {
+  if (req === undefined) {
+    console.log(PRE, $T(), 'ERROR in m_RouterLogic: req is undefined');
+    db = '<undefined-req>';
+  } else if (req.params === undefined) {
     console.log(PRE, $T(), 'ERROR in m_RouterLogic: req.params is undefined');
     console.log(PRE, $T(), 'req.ip:', req.ip);
+    db = '<undefined-req-params>';
   } else if (req.params.graph === undefined) {
     console.log(PRE, $T(), 'ERROR in m_RouterLogic: req.params.graph is undefined');
     console.log(PRE, $T(), 'req.ip:', req.ip);
+    db = '<undefined-req-params-graph>';
+  } else {
+    db = req.params.graph;
   }
-
-  // if req.params.graph is unexpectedly undefined, use an unfindable graph name
-  const db = req.params ? req.params.graph || '<undefined>' : '<undefined>';
 
   // Authenticate to allow spawning
   let ALLOW_SPAWN = false;
