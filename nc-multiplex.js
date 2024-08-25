@@ -318,7 +318,7 @@ function RenderManager() {
     const startTime = new Date().getTime();
     setInterval( ()=> {
       if (!document.cookie.includes('nc-multiplex-auth')) {
-        location.reload();
+        location.href='/login?expired';
       };
       const status = document.getElementById('status');
       let elapsed = (new Date().getTime() - startTime) / 1000;
@@ -326,7 +326,8 @@ function RenderManager() {
       let unit = 's';
       let out = '(' + remaining.toFixed(0) + unit + ' until auto logout)';
       if (remaining < 30) status.style.color = 'red';
-      if (remaining < 0) location.reload();
+      if (remaining < 1) location.href='/login?expired';
+
       status.innerHTML = out;
     }, 1000);
   </script>`;
