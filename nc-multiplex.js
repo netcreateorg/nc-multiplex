@@ -755,7 +755,7 @@ app.use(cookieParser());
  *  This route has to go before /graph/:graph/:file? below
  */
 app.get(`/graph/:graph/${NC_URL_CONFIG}`, (req, res) => {
-  const db = STAT.graph;
+  const db = req.params.graph;
   let response = '';
   const child = m_child_processes.find(child => child.db === db);
   if (child) {
@@ -782,11 +782,11 @@ app.get(`/graph/:graph/${NC_URL_CONFIG}`, (req, res) => {
  *  it will spawn a new process if able to.
  */
 async function m_RouterLogic(req) {
-  if (STAT === undefined) {
-    console.log(PRE, $T(), 'ERROR in m_RouterLogic: STAT is undefined');
+  if (req.params === undefined) {
+    console.log(PRE, $T(), 'ERROR in m_RouterLogic: req.params is undefined');
     console.log(PRE, $T(), 'req.ip:', req.ip);
   }
-  const db = STAT.graph;
+  const db = req.params.graph;
   let port;
   let path = '';
 
@@ -838,13 +838,13 @@ async function m_RouterLogic(req) {
 /// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 /** CONFIG FUNCTION: m_ProxyFilter nominally rewrites the /graph/{db} to
  *  localhost:{port}, but it also contains some debug code to detect if
- *  STAT is undefined as we have seen this on our servers and are trying
+ *  req.params is undefined as we have seen this on our servers and are trying
  *  to log the conditions when this happens.
  *  @param {string} rpath - route to check (remainder after any params)
  *  @param {Express.Request} req - request object
  */
 function m_ProxyFilter(rpath, req) {
-  // sri debug detect if STAT is undefined
+  // sri debug detect if req.params is undefined
   if (req === undefined) {
     console.log(PRE, $T(), `??? USE ${route} req is undefined`);
     return false;
@@ -862,15 +862,15 @@ function m_ProxyFilter(rpath, req) {
       );
     }
   }
-  if (STAT === undefined) {
-    console.log(PRE, $T(), `${WARN}??? USE ${rpath} STAT is undefined`, RST);
+  if (req.params === undefined) {
+    console.log(PRE, $T(), `${WARN}??? USE ${rpath} req.params is undefined`, RST);
     return false;
   }
   // pass if there is a file
   // (srinote: this param only contains the first segment, which may be a bug)
-  if (STAT.file) return true; // only first segment of path (bug?)
+  if (req.params.file) return true; // only first segment of path (bug?)
   // pass if there is a trailing '/'
-  if (STAT.graph && req.originalUrl.endsWith('/')) return true; // legit graph
+  if (req.params.graph && req.originalUrl.endsWith('/')) return true; // legit graph
   return false;
 }
 /// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -892,8 +892,8 @@ function m_ProxyRewrite(rpath, req) {
       instead of the full path as before, so use req.originalUrl instead
   /*/
 
-  // const rewrite = rpath.replace(`/graph/${STAT.graph}`, '');
-  const rewrite = fullPath.replace(`/graph/${STAT.graph}/`, '/');
+  // const rewrite = rpath.replace(`/graph/${req.params.graph}`, '');
+  const rewrite = fullPath.replace(`/graph/${req.params.graph}/`, '/');
   return rewrite;
 }
 /// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -959,14 +959,14 @@ app.get('/graph/:file', (req, res) => {
 /// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 // HANDLE "/kill/:graph" -- KILL REQUEST
 app.get('/kill/:graph/', (req, res) => {
-  if (STAT === undefined) {
-    console.log(PRE, $T(), 'ERROR: STAT is undefined for /kill/:graph/');
+  if (req.params === undefined) {
+    console.log(PRE, $T(), 'ERROR: req.params is undefined for /kill/:graph/');
     const fullUrl = req.protocol + '://' + req.get('host') + req.originalUrl;
     console.log(PRE, `error url: ${fullUrl}`);
     console.log(PRE, `client ip: ${req.ip}`);
     return;
   }
-  const db = STAT ? STAT.graph : '';
+  const db = req.params ? req.params.graph : '';
   console.log(PRE, $T(), `GET /kill/${db} (client ${req.ip})`);
   res.set('Content-Type', 'text/html');
   let response = `<h1>NetCreate Manager</h1>`;
@@ -997,7 +997,7 @@ app.get('/kill/:graph/', (req, res) => {
 /// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 /// HANDLE "/maketoken" -- GENERATE TOKENS
 app.get('/maketoken/:clsid/:projid/:dataset/:numgroups', (req, res) => {
-  const { clsid, projid, dataset, numgroups } = STAT;
+  const { clsid, projid, dataset, numgroups } = req.params;
   console.log(
     PRE,
     $T(),
@@ -1114,7 +1114,7 @@ app.use(
     console.log("...req.path", req.path);               // '/'
     console.log("...req.baseUrl", req.baseUrl);         // '/hawaii'
     console.log("...req.originalUrl", req.originalUrl); // '/hawaii/'
-    console.log("...STAT", STAT);           // '{}'
+    console.log("...req.params", req.params);           // '{}'
     console.log("...req.query", req.query);             // '{}'
     console.log("...req.route", req.route);             // undefined
     console.log("...req.hostname", req.hostname);       // 'sub.localhost'
