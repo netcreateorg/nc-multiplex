@@ -95,7 +95,7 @@ If no `home.html` page is found, the app will display a Net.Create logo and cont
 #### 5. Set your Password
 By default, the password is `kpop`.  We **strongly recommend** you set a custom password.  
 
-To set a new password, create a text file named `SESAME` containing just your password text (no line feed), and place it in the root `/nc-multiplex` folder. Make sure you don't inadvertently insert a **newline** at the end of the file.
+To set a new password, create a text file named `SESAME` containing just your password text (no line feed), and place it in the root `/nc-multiplex` folder. 
 
 Or you can:
 1. `ssh` to your machine
@@ -106,7 +106,7 @@ Or you can:
 #### 6. Start Reverse Proxy Server
 ```
 cd ~/your-dev-folder/nc-multiplex
-./start.sh
+./start-nc-multiplex.sh
 ```
 
 ***IP Address or Google Analytics Code**  
