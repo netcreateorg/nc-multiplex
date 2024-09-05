@@ -205,7 +205,7 @@ try {
 //
 try {
   let sesame = fs.readFileSync('SESAME', 'utf8');
-  PASSWORD = sesame;
+  PASSWORD = sesame.trim();
 } catch (err) {
   // no password, use default
   PASSWORD = DEFAULT_PASSWORD;
