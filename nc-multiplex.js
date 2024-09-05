@@ -725,7 +725,7 @@ try {
 /// If 'SESAME' file exists, use the password in there instead of default
 try {
   let sesame = fs.readFileSync('SESAME', 'utf8');
-  PASSWORD = sesame;
+  PASSWORD = sesame.trim();
 } catch (err) {
   PASSWORD = DEFAULT_PASSWORD; // no password, use default
 }
@@ -786,19 +786,20 @@ async function m_RouterLogic(req) {
   let port;
   let path = '';
   let db = '';
+  let err='';
 
   // sri debug detect if req.params is undefined
   if (req === undefined) {
     console.log(PRE, $T(), 'ERROR in m_RouterLogic: req is undefined');
-    db = '<undefined-req>';
+    err = '<undefined-req>';
   } else if (req.params === undefined) {
     console.log(PRE, $T(), 'ERROR in m_RouterLogic: req.params is undefined');
     console.log(PRE, $T(), 'req.ip:', req.ip);
-    db = '<undefined-req-params>';
+    err = '<undefined-req-params>';
   } else if (req.params.graph === undefined) {
     console.log(PRE, $T(), 'ERROR in m_RouterLogic: req.params.graph is undefined');
     console.log(PRE, $T(), 'req.ip:', req.ip);
-    db = '<undefined-req-params-graph>';
+    err = '<undefined-req-params-graph>';
   } else {
     db = req.params.graph;
   }
@@ -841,6 +842,10 @@ async function m_RouterLogic(req) {
     );
     path = `/error_no_database?graph=${db}`;
   }
+  if (err) {
+    console.log(PRE, $T(), '!!! m_RouterLogic error:', err);
+    path = undefined;
+  }
   return {
     protocol: 'http:',
     host: 'localhost',
@@ -882,6 +887,11 @@ function m_ProxyFilter(rpath, req) {
   // pass if there is a file
   // (srinote: this param only contains the first segment, which may be a bug)
   if (req.params.file) return true; // only first segment of path (bug?)
+  // check for missing originalUrl
+  if (req.originalUrl===undefined) {
+    console.log(PRE, $T(), '??? ProxyFilter req.originalUrl is undefined');
+    return false;
+  }
   // pass if there is a trailing '/'
   if (req.params.graph && req.originalUrl.endsWith('/')) return true; // legit graph
   return false;
@@ -895,11 +905,11 @@ function m_ProxyRewrite(rpath, req) {
   // remove '/graph/db/' for the rerouted calls
   // e.g. localhost/graph/hawaii/#/edit/mop => localhost:3000/#/edit/mop
 
-  const fullPath = req.originalUrl;
   if (req.originalUrl === undefined) {
     console.log(PRE, $T(), '??? ProxyRewrite req.originalUrl is undefined');
     return rpath;
   }
+  const fullPath = req.originalUrl;
 
   /*/ srinote: in hpm 3, path is the remainder after the /graph/db/ prefix
       instead of the full path as before, so use req.originalUrl instead
