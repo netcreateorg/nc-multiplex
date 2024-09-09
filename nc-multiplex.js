@@ -476,7 +476,7 @@ function RenderMemoryReport() {
   response += `<pre>SERVER MEMORY LOAD`;
   response += ` :: Used: ${sysUsedMB}MB / ${sysTotalMB}MB (${sysPercent}%)`;
   response += ` :: Remaining: ${sysFreeMB}MB`;
-  response += ` :: LowMem: ${OutOfMemory()}`;
+  response += ` :: Status: ${OutOfMemory()}`;
   response += `</pre>`;
   const psOut = m_GetInstancePIDs();
   response += `<pre>LAUNCHED PROCESSES ::\n\n${psOut}</pre>`;
@@ -642,8 +642,15 @@ async function LoadProcessState(child_processes, proxy_pool) {
  *  This is used to prevent node from starting too many processes.
  */
 function OutOfMemory() {
-  let free = os.freemem() / 1024; // mb
-  return free < SYSMEM_MIN;
+  const bytesToMB = 1024 * 1024;
+  let free = os.freemem() / bytesToMB; // mb
+  const warnMem = SYSMEM_MIN;
+  const critMem = SYSMEM_MIN / 4;
+  const low = free < critMem;
+  const warn = free < warnMem;
+  if (low) return `**CRITICAL** (< crit fail buffer ${critMem}MB)`;
+  if (warn) return `**WARNING** (< mem buffer ${warnMem}MB`;
+  return `OK (>${SYSMEM_MIN}MB free)`;
 }
 
 /*///////////////////////////// RUNTIME START \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\*\
