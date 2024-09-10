@@ -8,4 +8,15 @@
 
 # ignore custom password file
 # this should never be commited to the repo to expose the password
-SESAME
+SESAME*
+
+
+# ignore digital ocean start script, logs
+do-start.sh
+log*
+/*.txt
+/_archives
+
+# ignore process saving files
+.nc-process-state.json
+.nc-server-start.txt

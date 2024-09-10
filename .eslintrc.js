@@ -26,7 +26,7 @@ const config = {
     something else (e.g. parser) that ESLINT can make use of.
     See: eslint.org/docs/user-guide/configuring#use-a-plugin
   :*- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -*/
-  plugins: ['react'],
+  plugins: [],
   extends: [
     'eslint:recommended', // standard recommendations
     // 'plugin:react/recommended', // handle jsx syntax

@@ -1,0 +1,79 @@
+#!/usr/bin/env node
+
+/*///////////////////////////////// ABOUT \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\*\
+
+  Example Code
+  Attempt to open a websocket connection to a server and send/receive data
+  without any authentication
+
+\*\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\ * /////////////////////////////////////*/
+
+const WebSocket = require('ws');
+
+/// CONSTANTS & DECLARATIONS //////////////////////////////////////////////////
+/// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+const LOG = console.log.bind(console);
+/// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+const LOCALHOST = '127.0.0.1';
+const ARGS = process.argv.slice(2);
+let [host, port] = ARGS; 
+
+/// RUNTIME ///////////////////////////////////////////////////////////////////
+/// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+LOG();
+LOG(`# EXAMPLE WEBSOCKET PING`);
+LOG();
+
+// syntax help
+host = host || LOCALHOST;
+if (!host) {
+  LOG(`# USAGE`);
+  LOG(`  jssh wsping.jssh <host> <port>`);
+  LOG();
+  process.exit(1);
+}
+
+// check that host is a valid hostname or ip address
+if (!host.match(/^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$/) && !host.match(/^[a-z0-9.-]+$/)) {
+  LOG(`ERR: Invalid hostname or ip address: ${host}`);
+  LOG();
+  process.exit(1);
+}
+if (!port) port = 80;
+// check that port is a number
+if (isNaN(port)) {
+  LOG(`ERR: Invalid port number: ${port} is not a number`);
+  LOG();
+  process.exit(1);
+}
+// check that port is valid range
+if (port < 1 || port > 65535) {
+  LOG(`ERR: Invalid port number: ${port}`);
+  LOG();
+  process.exit(1);
+}
+
+LOG(`Connecting to ws://${host}:${port}`);
+const ws = new WebSocket(`ws://${host}:${port}`);
+ws.on('open', () => {
+  LOG(`.. Connected`);
+  ws.send('ping from sri');
+});
+ws.on('message', (data) => {
+  LOG(`.. Received: ${data}`);
+});
+ws.on('close', () => {
+  LOG(`.. Disconnected`);
+});
+ws.on('error', (err) => {
+  LOG(`.. Error: ${err.message}`);
+});
+
+// on SIGINT, close the connection
+process.on('SIGINT', () => {
+  LOG();
+  LOG(`# Closing connection to ws://${host}:${port}`);
+  ws.close();
+  process.exit(0);
+});
+

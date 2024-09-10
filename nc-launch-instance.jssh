@@ -1,0 +1,71 @@
+#!/usr/bin/env node
+
+/*///////////////////////////////// ABOUT \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\*\
+
+  This shell script will start NetCreate brunch server directly, bypassing nc.js
+  It is forked by `nc-multiplex.js` directly and parses process messages.
+
+  For correct operation, the main instance repo (e.g. netcreate-itest) should be
+  in the same directory, and it should have had `npm run package` run once.
+
+\*\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\ * /////////////////////////////////////*/
+
+const shell = require('shelljs');
+const NCUTILS = require('./modules/nc-utils');
+const { NC_PATH, NC_SERVER_PATH, NC_CONFIG_PATH } = require('./nc-launch-config');
+
+/// SRI HACK IN TIMESTAMP /////////////////////////////////////////////////////
+/// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+const { strDateStamp, strTimeStamp } = require('./modules/nc-logging-utils');
+const TSTART = `${strDateStamp()} ${strTimeStamp()}`; // Start time
+const $T = () => `${strDateStamp()} ${strTimeStamp()}`; // Update time
+
+/// CONSTANTS & DECLARATIONS //////////////////////////////////////////////////
+/// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+const PRE = '_LAUNCH  -';
+const CYNR = '\x1b[46m'; // reversed cyan
+const RST = '\x1b[0m';
+const WARN = '\x1b[41m\x1b[37m'; // red bg, white fg
+/// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+let m_data; // saved data from parent process
+
+/// HELPER FUNCTIONS //////////////////////////////////////////////////////////
+/// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+function m_WriteConfig(data) {
+  let script = NCUTILS.GetNCConfig(data);
+  shell.ShellString(script).to(`./${NC_CONFIG_PATH}/netcreate-config.js`);
+}
+/// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+function m_PromiseServer(port) {
+  shell.cd(NC_PATH);
+  const server = require(`./${NC_SERVER_PATH}/brunch-server`);
+  return new Promise((resolve, reject) => {
+    server({ port }, () => resolve());
+  });
+}
+/// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+async function m_StartServer(port) {
+  await m_PromiseServer(port);
+  const msg = {
+    event: 'SUCCESS'
+  };
+  process.send(msg);
+}
+
+/// IPC RUNTIME OPERATIONS ////////////////////////////////////////////////////
+/// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+process.on('message', data => {
+  m_data = data;
+  const { db, port } = m_data;
+  console.log(PRE,  $T(), `${CYNR} launching instance for '${db}'`, RST);
+  const CYN = '\x1b[96m'; // cyan
+  console.log(PRE, $T(), `${CYN}.. write config for '${db}'`, RST);
+  m_WriteConfig(data);
+  console.log(PRE, $T(), `${CYN}.. start brunch-server on '${port}'`, RST);
+  m_StartServer(data.port); // review: this is not synchronous
+});
+process.on('disconnect', () => {
+  const { db, port } = m_data;
+  console.log(PRE, WARN, $T(), `crash/disconnect detected by '${db}' ... closing server`, RST);
+  process.exit(0);
+});

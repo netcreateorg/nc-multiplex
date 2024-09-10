@@ -1,0 +1,100 @@
+#!/usr/bin/env node
+
+/*///////////////////////////////// ABOUT \\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\*\
+
+  Example Code
+  Dumps a memory and process report for the current node.js process.
+
+\*\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\ * /////////////////////////////////////*/
+
+const { execSync } = require('child_process');
+const os = require('os');
+
+/// CONSTANTS & DECLARATIONS //////////////////////////////////////////////////
+/// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+const MIN_SYSMEM = 256; // megabytes
+const LOG = console.log.bind(console);
+
+/// HELPER FUNCTIONS //////////////////////////////////////////////////////////
+/// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+/** get the output of ps matching nc-launch-instance.jssh entries */
+function m_GetInstancePIDs() {
+  const stdout = execSync('ps -e -o pid -o command | grep nc-launch-instance.jssh');
+  const regex = /(\d+).+\/versions\/node\/(.+)/;
+  const lines = stdout.toString().split('\n');
+  let out = '';
+  lines.forEach(line => {
+    if (line.includes('/bin/node ./nc-launch-instance.jssh')) {
+      const match = line.match(regex);
+      if (match) {
+        const [_, pid, cli] = match;
+        const paddedPid = pid.padEnd(7, ' ');
+        out += `  ${paddedPid} .nvm/versions/${cli}\n`;
+      }
+    }
+  });
+  return out;
+}
+/// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+/** generate a memory report object */
+function m_MemoryReport(unit = 'kb') {
+  const _fmt = x => x.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  let cf;
+  if (unit === 'kb') cf = 1024;
+  if (unit === 'mb') cf = 1024 * 1024;
+  const { heapUsed, heapTotal } = process.memoryUsage();
+  const huse = _fmt(Math.trunc(heapUsed / cf));
+  const htot = _fmt(Math.trunc(heapTotal / cf));
+  const hpct = (100 * (heapUsed / heapTotal)).toFixed(2);
+  const hrem = _fmt(Math.trunc((heapTotal - heapUsed) / cf));
+  const kb2mb = 1024 * 1024;
+  const osTotal = Math.trunc(os.totalmem() / kb2mb);
+  const osFree = Math.trunc(os.freemem() / kb2mb);
+  const osUsed = osTotal - osFree;
+  const sysTotal = _fmt(osTotal);
+  const sysFree = _fmt(osFree);
+  const sysUsed = _fmt(osUsed);
+  const sysPercent = (100 * (osUsed / osTotal)).toFixed(2);
+  const sysLow = osFree < MIN_SYSMEM;
+
+  const pids = m_GetInstancePIDs();
+  return {
+    unit, // kb or mb
+    heapTotal: htot, // total allocated javascript heap (can grow)
+    heapUsed: huse, // total used heap (can grow)
+    heapPercent: hpct, // heap percentage used (percentage)
+    heapBuffer: hrem, // heap remaining
+    pids, // multi-line string of instance PIDs info
+    sysTotalMB: sysTotal, // total system memory in MB
+    sysFreeMB: sysFree, // free system memory in MB
+    sysUsedMB: sysUsed, // used system memory in MB
+    sysMinMem: MIN_SYSMEM, // minimum system memory in MB
+    sysPercent: sysPercent, // percentage of system memory used
+    warnLowMem: sysLow // true if system memory is below MIN_SYSMEM
+  };
+}
+
+/// RUNTIME ///////////////////////////////////////////////////////////////////
+/// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+const mem = m_MemoryReport();
+const { pids, sysTotalMB, sysFreeMB, sysPercent, sysMinMem, warnLowMem } = mem;
+const { heapTotal, heapUsed, heapPercent } = mem;
+
+LOG();
+LOG(`# EXAMPLE MEMORY REPORT`);
+LOG();
+LOG(`# DETECTED PROXY INSTANCES`);
+if (pids.length === 0) {
+  LOG(`  - no instances found -`);
+}
+LOG(pids);
+
+LOG(`# MEMORY USAGE`);
+LOG(`  system total: ${sysTotalMB} MB / free: ${sysFreeMB} MB / ${sysPercent}% used`);
+LOG(`  v8 heap total: ${heapTotal} KB / used: ${heapUsed} KB / ${heapPercent}% used`);
+if (warnLowMem) {
+  LOG(`  WARNING: free system memory is below ${sysMinMem} MB`);
+} else {
+  LOG(`  free system memory is above ${sysMinMem} MB`);
+}
+LOG();
