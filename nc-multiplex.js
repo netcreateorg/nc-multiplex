@@ -476,7 +476,7 @@ function RenderMemoryReport() {
   response += `<pre>SERVER MEMORY LOAD`;
   response += ` :: Used: ${sysUsedMB}MB / ${sysTotalMB}MB (${sysPercent}%)`;
   response += ` :: Remaining: ${sysFreeMB}MB`;
-  response += ` :: Status: ${OutOfMemory()}`;
+  response += ` :: Status: ${MemoryReport()}`;
   response += `</pre>`;
   const psOut = m_GetInstancePIDs();
   response += `<pre>LAUNCHED PROCESSES ::\n\n${psOut}</pre>`;
@@ -571,6 +571,8 @@ function m_PromiseApp(db) {
     forked.send(ncStartParams);
   });
 }
+
+
 /// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 /** Add the newProcess to the array of m_child_processes
  *  but only if it doesn't already exist
@@ -636,12 +638,19 @@ async function LoadProcessState(child_processes, proxy_pool) {
   m_proxy_pool = proxy_pool;
   m_child_processes = child_processes;
 }
-
 /// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-/** Used to check if we have enough memory to start a new node process
- *  This is used to prevent node from starting too many processes.
+/** checks the memory status and returns true if out of memory. Unlike the
+ *  MemoryReport() function, this function returns a boolean and strictly
+ *  checks the free memory against the SYSMEM_MIN constant.
  */
-function OutOfMemory() {
+function m_OutOfMemory() {
+  const bytesToMB = 1024 * 1024;
+  let free = os.freemem() / bytesToMB; // mb
+  return free < SYSMEM_MIN;
+}
+/// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+/** Return a string that reports the memory status of the server */
+function MemoryReport() {
   const bytesToMB = 1024 * 1024;
   let free = os.freemem() / bytesToMB; // mb
   const warnMem = SYSMEM_MIN;
@@ -830,7 +839,7 @@ async function m_RouterLogic(req) {
     // b) No more ports available.
     console.log(PRE, $T(), '!!! no more ports. Not spawning', db);
     path = `/error_out_of_ports`;
-  } else if (OutOfMemory()) {
+  } else if (m_OutOfMemory()) {
     // c) Not enough memory to spawn new node instance
     console.log(PRE, $T(), '!!! out of memory. Not spawning', db);
     path = `/error_out_of_memory`;
