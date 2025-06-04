@@ -21,7 +21,6 @@
   flags
 
     node nc-multiplex.js --IP=192.168.1.40
-    node nc-multiplex.js --GOOGLEA=xxxxx
 
 \*\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\ * /////////////////////////////////////*/
 
@@ -60,7 +59,6 @@ const HEARTBEAT = 15; // Minutes. Number of minutes between memory log heartbeat
 let NVMRC;
 /// command line flags
 const argv = require('minimist')(process.argv.slice(2));
-const GOOGLEA = argv['googlea'];
 const IP = argv['ip'];
 /// local data structures
 let m_proxy_pool = []; // array of available port indices, usu [1...100]
@@ -542,7 +540,6 @@ function m_PromiseApp(db) {
           port: ports.appport,
           netport: ports.netport,
           portindex: ports.index,
-          GOOGLEA: GOOGLEA,
           process: forked
         };
         resolve(newProcessDef); // pass to SpawnApp
@@ -561,8 +558,7 @@ function m_PromiseApp(db) {
       port: ports.appport,
       netport: ports.netport,
       process: forked,
-      IP,
-      GOOGLEA
+      IP
     };
     console.log(
       PRE,
@@ -629,7 +625,6 @@ async function LoadProcessState(child_processes, proxy_pool) {
         port,
         netport,
         portindex,
-        GOOGLEA: GOOGLEA,
         process: forked
       };
       forked.send(ncStartParams);

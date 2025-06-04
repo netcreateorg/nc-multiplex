@@ -111,12 +111,10 @@ cd ~/your-dev-folder/nc-multiplex
 ```
 
 ***IP Address or Google Analytics Code**  
-Use the optional `--ip` or `--googlea` parameters if you need 
-to start the server with a specific IP address or google
-analytics code. e.g.: 
+Use the optional `--ip` parameters if you need 
+to start the server with a specific IP address. e.g.: 
 
   `node nc-multiplex.js --ip=192.168.1.40`
-  `node nc-multiplex.js --googlea=xxxxx`
       
 See "Caveats" below for more information.
 
@@ -233,10 +231,9 @@ Or you can:
 
 
 ## Startup Parameters
-Use startup parameters to set the ip address or google analytics code:
+Use startup parameters to set the ip address code:
 
 * `--ip` -- e.g. `node nc-multiplex.js --ip=192.168.1.40`.  See "IP option is for private IP networks" below for more details.
-* `--googlea` -- e.g.  `node nc-multiplex.js --googlea=xxxxx`
 
 
 ## Variables
