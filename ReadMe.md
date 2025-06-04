@@ -164,7 +164,7 @@ Shortcut: If you have an active valid cookie, you can just go directly to the UR
 
 All databases are stored in the Net.Create runtime folder, e.g. `~/your-dev-folder/nc-multiplex/netcreate-itest/runtime/`.  All node processes share the same database files.  So any database you spin up will be in the main runtime folder.
 
-* Prepopulate the databases and templates by simply copying the `*.loki` and `*.template` files there prior to running `node nc-multiplex.js`.
+* Prepopulate the databases and templates by simply copying the `*.loki` and `*.template` files there prior to running `./start-nc-multiplex.sh`.
 
 * You can copy and back up databases directly in the `runtime` folder.
 
@@ -211,7 +211,7 @@ To start up:
 	b. `git pull` 
 	c. `npm run package`
 4.  `cd your-dev-folder/nc-mutiplex` 
-5.  `node nc-multiplex.js`
+5.  `/.start-nc-multiplex.sh`
 
 ---
 
