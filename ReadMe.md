@@ -51,10 +51,10 @@ cd netcreate-itest
 npm ci
 ```
 
-If this is your first run with a newly cloned repo, run Net.Create once to set the initial configuration file and build dependent libraries:
+If this is your first run with a newly cloned repo, you need to create a new project.  Run Net.Create once to set the initial configuration file:
 ```
 cd netcreate-itest
-npm run package
+./nc.js --dataset=demo
 ```
 
 Check your browser to make sure it's running:
@@ -66,6 +66,7 @@ Then stop the Net.Create application.
 ```
 ctrl-c
 ```
+
 
 #### 3. Compile Net.Create for Classroom
 
