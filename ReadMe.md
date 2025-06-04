@@ -162,20 +162,6 @@ If you're not logged in, you will get an error.
 Shortcut: If you have an active valid cookie, you can just go directly to the URL.
 
 
-#### 10. Generate Tokens
-
-Any user who wants to edit a graph will need to generate a token.  Tokens now only work for specific graphs, so for instance a token for "hawaii" will not allow you to open "tacitus".  To generate tokens, in the "Generate Tokens" box:
-
-1. Select the graph you want to generate tokens for.
-2. Enter a Class ID.  It can be any string.  e.g. you can use this to designate an organization.
-3. Enter a Project ID.  It can be any string.  e.g. you can use this to designate a group.
-4. Select the number of tokens to generate.
-5. Click "Generate Tokens".
-6. Copy the resulting codes.
-
-You can regenerate the same codes any time.
-
-
 ## Managing Databases
 
 All databases are stored in the Net.Create runtime folder, e.g. `~/your-dev-folder/nc-multiplex/netcreate-itest/runtime/`.  All node processes share the same database files.  So any database you spin up will be in the main runtime folder.

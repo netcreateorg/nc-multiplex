@@ -338,7 +338,7 @@ function RenderManager() {
   response += `</div>`;
   response += `<div id="forms" style="display: flex">`;
   response += RenderNewGraphForm();
-  response += RenderGenerateTokensForm();
+  // response += RenderGenerateTokensForm();
   response += `</div>`;
   response += RenderMemoryReport();
   response += `<p><i>page last loaded on: ${m_stat.refreshed.toLocaleTimeString()} <span id='status'></span></i></p >`;
@@ -432,42 +432,42 @@ function RenderNewGraphForm() {
    </div>`;
 }
 /// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-function RenderGenerateTokensForm() {
-  let response = `<div class="box">`;
-  let dbnames = NCUTILS.GetDatabaseNamesArray().reduce(
-    (acc, curr) => acc + "<option value='" + curr + "'>" + curr + '</option>',
-    ''
-  );
-  response += `
-    <script>
-      async function MakeTokens() {
-        console.log('make tokens');
-        const classid = document.getElementById('classid').value;
-        const projid = document.getElementById('projid').value;
-        const count = document.getElementById('count').value;
-        const dataset = document.getElementById('datasets').value;
-        let data = await fetch('./maketoken/'+classid+'/'+projid+'/'+dataset+'/'+count);
-        let result = await data.text();
-        const tokenDisplay = document.getElementById('tokenDisplay');
-        tokenDisplay.value = result;
-      }
-    </script>
-    <h3>Generate Tokens</h3>
-    <div>
-      <p>Select a database, enter a class id, a project id, and number of tokens to generate.  Then click "Generate Tokens".</p>
-      <select id="datasets">
-        ${dbnames}
-      </select>
-      <input id="classid" placeholder="Class ID e.g. 'PER1'">
-      <input id="projid" placeholder="Project ID e.g. 'ROME'">
-      <input id="count" placeholder="Num of tokens e.g. '10'">
-      <button onclick="MakeTokens()">Generate Tokens</button><br/><br/>
-      <textarea id="tokenDisplay" rows="10" cols="80" placeholder="Tokens will appear here..." readonly></textarea>
-    </div>
-  `;
-  response += `</div>`;
-  return response;
-}
+// function RenderGenerateTokensForm() {
+//   let response = `<div class="box">`;
+//   let dbnames = NCUTILS.GetDatabaseNamesArray().reduce(
+//     (acc, curr) => acc + "<option value='" + curr + "'>" + curr + '</option>',
+//     ''
+//   );
+//   response += `
+//     <script>
+//       async function MakeTokens() {
+//         console.log('make tokens');
+//         const classid = document.getElementById('classid').value;
+//         const projid = document.getElementById('projid').value;
+//         const count = document.getElementById('count').value;
+//         const dataset = document.getElementById('datasets').value;
+//         let data = await fetch('./maketoken/'+classid+'/'+projid+'/'+dataset+'/'+count);
+//         let result = await data.text();
+//         const tokenDisplay = document.getElementById('tokenDisplay');
+//         tokenDisplay.value = result;
+//       }
+//     </script>
+//     <h3>Generate Tokens</h3>
+//     <div>
+//       <p>Select a database, enter a class id, a project id, and number of tokens to generate.  Then click "Generate Tokens".</p>
+//       <select id="datasets">
+//         ${dbnames}
+//       </select>
+//       <input id="classid" placeholder="Class ID e.g. 'PER1'">
+//       <input id="projid" placeholder="Project ID e.g. 'ROME'">
+//       <input id="count" placeholder="Num of tokens e.g. '10'">
+//       <button onclick="MakeTokens()">Generate Tokens</button><br/><br/>
+//       <textarea id="tokenDisplay" rows="10" cols="80" placeholder="Tokens will appear here..." readonly></textarea>
+//     </div>
+//   `;
+//   response += `</div>`;
+//   return response;
+// }
 /// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 function RenderMemoryReport() {
   const { sysUsedMB, sysFreeMB, sysTotalMB, sysPercent } = m_MemoryReport();
