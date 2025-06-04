@@ -48,12 +48,13 @@ git clone https://github.com/netcreateorg/netcreate-itest.git
 
 ```
 cd netcreate-itest
+git checkout dev     // if you need to switch to a different branch
 npm ci
 ```
 
 If this is your first run with a newly cloned repo, you need to create a new project.  Run Net.Create once to set the initial configuration file:
 ```
-cd netcreate-itest
+cd ~/your-dev-folder/nc-multiplex/netcreate-itest/    // if necessary
 ./nc.js --dataset=demo
 ```
 
