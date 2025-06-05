@@ -174,38 +174,39 @@ function m_SendErrorResponse(res, msg) {
 }
 
 /// SESSION OPERATIONS ////////////////////////////////////////////////////////
-/// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-/** Generates a list of tokens using the NetCreate common-session module
- *  REVIEW: Requiring a module from the secondary netcreate-2018 repo
- *  is a little iffy.
- *  @param {string} clsId - classId
- *  @param {string} projId - projectId
- *  @param {string} dataset - database name
- *  @param {integer} numGroups - number of tokens to generate
- *  @return {string}
- */
-function MakeToken(clsId, projId, dataset, numGroups) {
-  // from nc-logic.js
-  if (typeof clsId !== 'string')
-    return 'args: str classId, str projId, str dataset, int numGroups';
-  if (typeof projId !== 'string')
-    return 'args: str classId, str projId, str dataset, int numGroups';
-  if (typeof dataset !== 'string')
-    return 'args: str classId, str projId, str dataset, int numGroups';
-  if (clsId.length > 12) return 'classId arg1 should be 12 chars or less';
-  if (projId.length > 12) return 'classId arg1 should be 12 chars or less';
-  if (!Number.isInteger(numGroups)) return 'numGroups arg3 must be integer';
-  if (numGroups < 1) return 'numGroups arg3 must be positive integer';
+// /// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+// DEPRECATED MakeToken function -- keep in case we need it again
+// /** Generates a list of tokens using the NetCreate common-session module
+//  *  REVIEW: Requiring a module from the secondary netcreate-2018 repo
+//  *  is a little iffy.
+//  *  @param {string} clsId - classId
+//  *  @param {string} projId - projectId
+//  *  @param {string} dataset - database name
+//  *  @param {integer} numGroups - number of tokens to generate
+//  *  @return {string}
+//  */
+// function MakeToken(clsId, projId, dataset, numGroups) {
+//   // from nc-logic.js
+//   if (typeof clsId !== 'string')
+//     return 'args: str classId, str projId, str dataset, int numGroups';
+//   if (typeof projId !== 'string')
+//     return 'args: str classId, str projId, str dataset, int numGroups';
+//   if (typeof dataset !== 'string')
+//     return 'args: str classId, str projId, str dataset, int numGroups';
+//   if (clsId.length > 12) return 'classId arg1 should be 12 chars or less';
+//   if (projId.length > 12) return 'classId arg1 should be 12 chars or less';
+//   if (!Number.isInteger(numGroups)) return 'numGroups arg3 must be integer';
+//   if (numGroups < 1) return 'numGroups arg3 must be positive integer';
 
-  let out = `TOKEN LIST for class '${clsId}' project '${projId}' dataset '${dataset}'\n\n`;
-  let pad = String(numGroups).length;
-  for (let i = 1; i <= numGroups; i++) {
-    let id = String(i);
-    id = id.padStart(pad, '0');
-    out += `group ${id}\t${SESSION.MakeToken(clsId, projId, i, dataset)}\n`;
-  }
-  return out;
-}
+//   let out = `TOKEN LIST for class '${clsId}' project '${projId}' dataset '${dataset}'\n\n`;
+//   let pad = String(numGroups).length;
+//   for (let i = 1; i <= numGroups; i++) {
+//     let id = String(i);
+//     id = id.padStart(pad, '0');
+//     out += `group ${id}\t${SESSION.MakeToken(clsId, projId, i, dataset)}\n`;
+//   }
+//   return out;
+// }
 /// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 /** Used to generate a hashed password for use in the cookie
  *  so that password text is not visible in the cookie.
@@ -1029,21 +1030,23 @@ app.get('/kill/:graph/', (req, res) => {
   res.send(response);
 });
 /// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-/// HANDLE "/maketoken" -- GENERATE TOKENS
-app.get('/maketoken/:clsid/:projid/:dataset/:numgroups', (req, res) => {
-  const { clsid, projid, dataset, numgroups } = req.params;
-  console.log(
-    PRE,
-    $T(),
-    'maketoken GET on /maketoken',
-    clsid,
-    projid,
-    dataset,
-    numgroups
-  );
-  let response = MakeToken(clsid, projid, dataset, parseInt(numgroups));
-  res.set('Content-Type', 'text/html');
-  res.send(response);
+// DEPRECATED RenderGenerateTokensForm function -- keep in case we need it again
+// /// HANDLE "/maketoken" -- GENERATE TOKENS
+// app.get('/maketoken/:clsid/:projid/:dataset/:numgroups', (req, res) => {
+//   const { clsid, projid, dataset, numgroups } = req.params;
+//   console.log(
+//     PRE,
+//     $T(),
+//     'maketoken GET on /maketoken',
+//     clsid,
+//     projid,
+//     dataset,
+//     numgroups
+//   );
+//   let response = MakeToken(clsid, projid, dataset, parseInt(numgroups));
+//   res.set('Content-Type', 'text/html');
+//   res.send(response);
+// });
 });
 
 /// EXPRESS MANAGEMENT ROUTES //////////////////////////////////////////////////
