@@ -32,8 +32,10 @@ const path = require('path');
 const express = require('express');
 const cookieParser = require('cookie-parser');
 const crypto = require('crypto');
+const archiver = require('archiver');
+
 // session-related imports from netcreate subrepo
-const { NC_SERVER_PATH, NC_URL_CONFIG, ScanForRepos } = require('./nc-launch-config');
+const { NC_SERVER_PATH, NC_RUNTIME_PATH, NC_LOGS_PATH, NC_BACKUPS_PATH, NC_URL_CONFIG, ScanForRepos } = require('./nc-launch-config');
 const SESSION = require(`${NC_SERVER_PATH}/app/unisys/common-session.js`);
 //
 const NCUTILS = require('./modules/nc-utils.js');
@@ -82,6 +84,20 @@ const { strDateStamp, strTimeStamp } = NCLOG;
 const $T = () => `${strDateStamp()} ${strTimeStamp()}`; // return timestamp string
 
 /// HELPER METHODS ////////////////////////////////////////////////////////////
+/// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+/** return server IP address */
+function m_GetServerIp() {
+  const interfaces = os.networkInterfaces();
+  for (const name of Object.keys(interfaces)) {
+    for (const iface of interfaces[name]) {
+      // Skip over internal (i.e., 127.0.0.1) and non-IPv4 addresses
+      if (iface.family === 'IPv4' && !iface.internal) {
+        return iface.address;
+      }
+    }
+  }
+  return 'localhost'; // fallback
+}
 /// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 /** return memory parameters */
 function m_MemoryReport(unit = 'kb') {
@@ -337,6 +353,7 @@ function RenderManager() {
   response += `</div>`;
   response += `<div id="forms" style="display: flex">`;
   response += RenderNewGraphForm();
+  response += RenderDownloadLogs();
   // response += RenderGenerateTokensForm();
   response += `</div>`;
   response += RenderMemoryReport();
@@ -431,6 +448,21 @@ function RenderNewGraphForm() {
    </div>`;
 }
 /// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+function RenderDownloadLogs() {
+  return `
+    <div class="box">
+      <h3>Download Data</h3>
+      <p>Download data for all graphs for ${m_GetServerIp()} as a zip file.</p>
+      <ul>
+        <li><a href="/download-logs">All Logs</a></li>
+        <li><a href="/download-lokis">All .loki files</a></li>
+        <li>(<a href="/download-backups">All Backup .loki files</a>)</li>
+        <li><a href="/download-templates">All .template.toml files</a></li>
+      </ul>
+    </div>`;
+}
+/// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+// DEPRECATED RenderGenerateTokensForm function -- keep in case we need it again
 // function RenderGenerateTokensForm() {
 //   let response = `<div class="box">`;
 //   let dbnames = NCUTILS.GetDatabaseNamesArray().reduce(
@@ -1047,7 +1079,108 @@ app.get('/kill/:graph/', (req, res) => {
 //   res.set('Content-Type', 'text/html');
 //   res.send(response);
 // });
+/// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+function m_Archive(folderPath, fileExtensions, zipFilename, res) {
+  // Create a zip archive of the folder
+  const archive = archiver('zip', {
+    zlib: { level: 9 } // Compression level
+  });
+
+  archive.on('error', err => {
+    console.error('Archive error:', err);
+    res.status(500).send({ error: 'Could not create archive' });
+  });
+
+  archive.pipe(res);
+
+  // Add all files from the folder
+  fs.readdir(folderPath, (err, files) => {
+    if (err) {
+      console.error('Read dir error:', err);
+      return res.status(500).send({ error: 'Could not read folder' });
+    }
+
+    files.filter(file => file.endsWith(fileExtensions)).forEach(file => {
+      const filePath = path.join(folderPath, file);
+      archive.file(filePath, { name: file });
+    });
+
+    archive.finalize(); // Finish zipping
+  });
+}
+/// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+/// HANDLE "/download-logs" -- DOWNLOAD RESEARCH LOGS
+app.get('/download-logs', (req, res) => {
+  console.log(PRE, $T(), `GET /download-logs (client ${req.ip})`);
+
+  const folderPath = path.join(NC_LOGS_PATH); // Folder with text files
+  const zipFilename = `netcreate_logs_${m_GetServerIp()}_${$T()}.zip`;
+
+  res.setHeader('Content-Disposition', `attachment; filename=${zipFilename}`);
+  res.setHeader('Content-Type', 'application/zip');
+
+  return m_Archive(
+    folderPath,
+    '.txt',
+    zipFilename,
+    res
+  );
 });
+/// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+/// HANDLE "/download-lokis" -- DOWNLOAD RESEARCH LOGS
+app.get('/download-lokis', (req, res) => {
+  console.log(PRE, $T(), `GET /download-lokis (client ${req.ip})`);
+
+  const folderPath = path.join(NC_RUNTIME_PATH); // Folder with text files
+  const zipFilename = `netcreate_lokis_${m_GetServerIp()}_${$T()}.zip`;
+
+  res.setHeader('Content-Disposition', `attachment; filename=${zipFilename}`);
+  res.setHeader('Content-Type', 'application/zip');
+
+  return m_Archive(
+    folderPath,
+    '.loki',
+    zipFilename,
+    res
+  );
+});
+/// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+/// HANDLE "/download-backups" -- DOWNLOAD RESEARCH LOGS
+app.get('/download-backups', (req, res) => {
+  console.log(PRE, $T(), `GET /download-backups (client ${req.ip})`);
+
+  const folderPath = path.join(NC_BACKUPS_PATH); // Folder with text files
+  const zipFilename = `netcreate_backups_${m_GetServerIp()}_${$T()}.zip`;
+
+  res.setHeader('Content-Disposition', `attachment; filename=${zipFilename}`);
+  res.setHeader('Content-Type', 'application/zip');
+
+  return m_Archive(
+    folderPath,
+    '.loki',
+    zipFilename,
+    res
+  );
+});
+/// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+/// HANDLE "/download-templates" -- DOWNLOAD RESEARCH LOGS
+app.get('/download-templates', (req, res) => {
+  console.log(PRE, $T(), `GET /download-templates (client ${req.ip})`);
+
+  const folderPath = path.join(NC_RUNTIME_PATH); // Folder with text files
+  const zipFilename = `netcreate_templates_${m_GetServerIp()}_${$T()}.zip`;
+
+  res.setHeader('Content-Disposition', `attachment; filename=${zipFilename}`);
+  res.setHeader('Content-Type', 'application/zip');
+
+  return m_Archive(
+    folderPath,
+    '.template.toml',
+    zipFilename,
+    res
+  );
+});
+
 
 /// EXPRESS MANAGEMENT ROUTES //////////////////////////////////////////////////
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - *\
