@@ -455,10 +455,11 @@ function RenderDownloadLogs() {
       <h3>Download Data</h3>
       <p>Download data for all graphs for ${SERVER_IP} as a zip file.</p>
       <ul>
-        <li><a href="/download-logs">All Logs</a></li>
-        <li><a href="/download-lokis">All .loki files</a></li>
-        <li>(<a href="/download-backups">All Backup .loki files</a>)</li>
-        <li><a href="/download-templates">All .template.toml files</a></li>
+        <li><a href="/download_all_networks">All Networks (.loki + .templates.toml)</a></li>
+        <li><a href="/download_logs">All Logs</a></li>
+        <li><a href="/download_lokis">All .loki</a></li>
+        <li><a href="/download_templates">All .template.toml</a></li>
+        <li>(<a href="/download_backups">All Backup .loki</a>)</li>
       </ul>
     </div>`;
 }
@@ -1127,6 +1128,20 @@ function m_Archive(folderPath, fileExtensions, zipFilename, req, res) {
     archive.finalize(); // Finish zipping
   });
 }
+/// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+/// HANDLE "/download_all_networks" -- DOWNLOAD LOKI and TEMPLATES
+app.get('/download_all_networks', (req, res) => {
+  console.log(PRE, $T(), `GET /download_all_networks (client ${req})`);
+  const folderPath = path.join(NC_RUNTIME_PATH);
+  const zipFilename = `netcreate_networks_${SERVER_IP}_${$T()}.zip`;
+  return m_Archive(
+    folderPath,
+    ['.loki', '.template.toml'],
+    zipFilename,
+    req,
+    res
+  );
+});
 /// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 /// HANDLE "/download_logs" -- DOWNLOAD RESEARCH LOGS
 app.get('/download_logs', (req, res) => {
