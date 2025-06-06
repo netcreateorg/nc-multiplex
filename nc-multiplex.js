@@ -69,6 +69,7 @@ let m_child_processes = []; // array of forked process + meta info = { db, port,
 let HOMEPAGE_EXISTS; // Flag for existence of home.html override
 let PASSWORD; // Either default password or password in `SESAME` file
 let PASSWORD_HASH; // Hash generated from password
+let SERVER_IP; // IP address of server.  Used to tag download filenames.
 /// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 const CYN = '\x1b[96m'; // cyan
 const CYNR = '\x1b[46m'; // reversed cyan
@@ -452,7 +453,7 @@ function RenderDownloadLogs() {
   return `
     <div class="box">
       <h3>Download Data</h3>
-      <p>Download data for all graphs for ${m_GetServerIp()} as a zip file.</p>
+      <p>Download data for all graphs for ${SERVER_IP} as a zip file.</p>
       <ul>
         <li><a href="/download-logs">All Logs</a></li>
         <li><a href="/download-lokis">All .loki files</a></li>
@@ -1289,8 +1290,9 @@ app.use(
 /// EXPRESS START LISTENING ///////////////////////////////////////////////////
 /// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 app.listen(PORT_ROUTER, () => {
+  SERVER_IP = m_GetServerIp();
   console.log(PRE, $T());
-  console.log(PRE, `NC-MULTIPLEX Express Server running on port ${PORT_ROUTER}.`);
+  console.log(PRE, `NC-MULTIPLEX Express Server running on ${SERVER_IP} port ${PORT_ROUTER}.`);
 
   // if .nc-process-state.json exists, read and parse it
   if (!fs.existsSync('.nc-process-state.json')) {
