@@ -1092,8 +1092,10 @@ function m_Archive(folderPath, fileExtensions, zipFilename, req, res) {
   });
 
   archive.on('error', err => {
-    console.error('Archive error:', err);
-    res.status(500).send({ error: 'Could not create archive' });
+    const errmsg = `Error creating zip: ${err.message}`;
+    console.log(PRE, errmsg);
+    m_SendErrorResponse(res, errmsg);
+    return;
   });
 
   archive.pipe(res);
@@ -1101,8 +1103,10 @@ function m_Archive(folderPath, fileExtensions, zipFilename, req, res) {
   // Add all files from the folder
   fs.readdir(folderPath, (err, files) => {
     if (err) {
-      console.error('Read dir error:', err);
-      return res.status(500).send({ error: 'Could not read folder' });
+      const errmsg = `Error reading folder: ${err.message}`;
+      console.log(PRE, errmsg);
+      m_SendErrorResponse(res, errmsg);
+      return;
     }
 
     files.filter(file => file.endsWith(fileExtensions)).forEach(file => {
@@ -1110,78 +1114,64 @@ function m_Archive(folderPath, fileExtensions, zipFilename, req, res) {
       archive.file(filePath, { name: file });
     });
 
+    res.setHeader('Content-Disposition', `attachment; filename=${zipFilename}`);
+    res.setHeader('Content-Type', 'application/zip');
     archive.finalize(); // Finish zipping
   });
 }
 /// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-/// HANDLE "/download-logs" -- DOWNLOAD RESEARCH LOGS
-app.get('/download-logs', (req, res) => {
-  console.log(PRE, $T(), `GET /download-logs (client ${req.ip})`);
-
-  const folderPath = path.join(NC_LOGS_PATH); // Folder with text files
-  const zipFilename = `netcreate_logs_${m_GetServerIp()}_${$T()}.zip`;
-
-  res.setHeader('Content-Disposition', `attachment; filename=${zipFilename}`);
-  res.setHeader('Content-Type', 'application/zip');
-
+/// HANDLE "/download_logs" -- DOWNLOAD RESEARCH LOGS
+app.get('/download_logs', (req, res) => {
+  console.log(PRE, $T(), `GET /download_logs (client ${req})`);
+  const folderPath = path.join(NC_LOGS_PATH);
+  const zipFilename = `netcreate_logs_${SERVER_IP}_${$T()}.zip`;
   return m_Archive(
     folderPath,
     '.txt',
     zipFilename,
+    req,
     res
   );
 });
 /// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-/// HANDLE "/download-lokis" -- DOWNLOAD RESEARCH LOGS
-app.get('/download-lokis', (req, res) => {
-  console.log(PRE, $T(), `GET /download-lokis (client ${req.ip})`);
-
-  const folderPath = path.join(NC_RUNTIME_PATH); // Folder with text files
-  const zipFilename = `netcreate_lokis_${m_GetServerIp()}_${$T()}.zip`;
-
-  res.setHeader('Content-Disposition', `attachment; filename=${zipFilename}`);
-  res.setHeader('Content-Type', 'application/zip');
-
+/// HANDLE "/download_lokis" -- DOWNLOAD RESEARCH LOGS
+app.get('/download_lokis', (req, res) => {
+  console.log(PRE, $T(), `GET /download_lokis (client ${req.ip})`);
+  const folderPath = path.join(NC_RUNTIME_PATH);
+  const zipFilename = `netcreate_lokis_${SERVER_IP}_${$T()}.zip`;
   return m_Archive(
     folderPath,
     '.loki',
     zipFilename,
+    req,
     res
   );
 });
 /// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-/// HANDLE "/download-backups" -- DOWNLOAD RESEARCH LOGS
-app.get('/download-backups', (req, res) => {
-  console.log(PRE, $T(), `GET /download-backups (client ${req.ip})`);
-
-  const folderPath = path.join(NC_BACKUPS_PATH); // Folder with text files
-  const zipFilename = `netcreate_backups_${m_GetServerIp()}_${$T()}.zip`;
-
-  res.setHeader('Content-Disposition', `attachment; filename=${zipFilename}`);
-  res.setHeader('Content-Type', 'application/zip');
-
+/// HANDLE "/download_backups" -- DOWNLOAD RESEARCH LOGS
+app.get('/download_backups', (req, res) => {
+  console.log(PRE, $T(), `GET /download_backups (client ${req.ip})`);
+  const folderPath = path.join(NC_BACKUPS_PATH);
+  const zipFilename = `netcreate_backups_${SERVER_IP}_${$T()}.zip`;
   return m_Archive(
     folderPath,
     '.loki',
     zipFilename,
+    req,
     res
   );
 });
 /// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-/// HANDLE "/download-templates" -- DOWNLOAD RESEARCH LOGS
-app.get('/download-templates', (req, res) => {
-  console.log(PRE, $T(), `GET /download-templates (client ${req.ip})`);
-
-  const folderPath = path.join(NC_RUNTIME_PATH); // Folder with text files
-  const zipFilename = `netcreate_templates_${m_GetServerIp()}_${$T()}.zip`;
-
-  res.setHeader('Content-Disposition', `attachment; filename=${zipFilename}`);
-  res.setHeader('Content-Type', 'application/zip');
-
+/// HANDLE "/download_templates" -- DOWNLOAD RESEARCH LOGS
+app.get('/download_templates', (req, res) => {
+  console.log(PRE, $T(), `GET /download_templates (client ${req.ip})`);
+  const folderPath = path.join(NC_RUNTIME_PATH);
+  const zipFilename = `netcreate_templates_${SERVER_IP}_${$T()}.zip`;
   return m_Archive(
     folderPath,
     '.template.toml',
     zipFilename,
+    req,
     res
   );
 });
