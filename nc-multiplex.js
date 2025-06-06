@@ -1110,9 +1110,16 @@ function m_Archive(folderPath, fileExtensions, zipFilename, req, res) {
       return;
     }
 
-    files.filter(file => file.endsWith(fileExtensions)).forEach(file => {
-      const filePath = path.join(folderPath, file);
-      archive.file(filePath, { name: file });
+    // Ensure fileExtensions is an array
+    if (!Array.isArray(fileExtensions)) {
+      fileExtensions = [fileExtensions];
+    }
+    // Filter files by the specified extensions and add them to the archive
+    fileExtensions.map(ext => {
+      files.filter(file => file.endsWith(ext)).forEach(file => {
+        const filePath = path.join(folderPath, file);
+        archive.file(filePath, { name: file });
+      });
     });
 
     res.setHeader('Content-Disposition', `attachment; filename=${zipFilename}`);
