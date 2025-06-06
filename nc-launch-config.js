@@ -22,13 +22,19 @@ const REPO_PATHS = [
     repo: './netcreate-2018',
     build: 'build',
     config: 'app/assets',
-    pubConfig: 'netcreate-config.js'
+    pubConfig: 'netcreate-config.js',
+    runtime: 'runtime',
+    logs: 'runtime/logs',
+    backups: 'runtime/backups'
   },
   {
     repo: './netcreate-itest',
     build: '',
     config: 'app-config',
-    pubConfig: 'config/netcreate-config.js'
+    pubConfig: 'config/netcreate-config.js',
+    runtime: 'runtime',
+    logs: 'runtime/logs',
+    backups: 'runtime/backups'
   }
 ];
 
@@ -58,10 +64,13 @@ function ScanForRepos() {
 /// EXPORTS ///////////////////////////////////////////////////////////////////
 /// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 const { primary, count, repoExists } = ScanForRepos();
-const { repo, build, config, pubConfig } = primary;
+const { repo, build, config, pubConfig, runtime, logs, backups } = primary;
 const NC_PATH = `./${path.join(repo, build)}`;
 const NC_SERVER_PATH = `./${path.join(repo, build)}`;
 const NC_CONFIG_PATH = `./${path.join(repo, build, config)}`;
+const NC_RUNTIME_PATH = `./${path.join(repo, build, runtime)}`;
+const NC_LOGS_PATH = `./${path.join(repo, build, logs)}`;
+const NC_BACKUPS_PATH = `./${path.join(repo, build, backups)}`;
 const NC_URL_CONFIG = pubConfig;
 /// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 module.exports = {
@@ -69,5 +78,8 @@ module.exports = {
   NC_PATH,
   NC_SERVER_PATH,
   NC_CONFIG_PATH,
+  NC_RUNTIME_PATH,
+  NC_LOGS_PATH,
+  NC_BACKUPS_PATH,
   NC_URL_CONFIG
 };
