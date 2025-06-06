@@ -1080,7 +1080,12 @@ app.get('/kill/:graph/', (req, res) => {
 //   res.send(response);
 // });
 /// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-function m_Archive(folderPath, fileExtensions, zipFilename, res) {
+function m_Archive(folderPath, fileExtensions, zipFilename, req, res) {
+  if (!CookieIsValid(req)) {
+      res.redirect(`/error_not_authorized`);
+    return;
+  }
+
   // Create a zip archive of the folder
   const archive = archiver('zip', {
     zlib: { level: 9 } // Compression level
