@@ -11,7 +11,7 @@
     If the graph already exists, it will be loaded. Otherwise it will create a new graph.
     You need to be logged into the manager for this to work.
 
-  Manager runs on `http://localhost:80`
+  Manager runs on `http://localhost:80` by default.  Can be overriden with --port=8080
 
   proxied routes
     /                            => localhost:80 Root: NetCreate Manager page
@@ -20,7 +20,7 @@
 
   flags
 
-    node nc-multiplex.js --IP=192.168.1.40
+    node nc-multiplex.js --IP=192.168.1.40 --port=8080
 
 \*\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\ * /////////////////////////////////////*/
 
@@ -46,7 +46,7 @@ const NCLOG = require('./modules/nc-logging-utils');
 const PRE = 'NC_MUX   -'; // console.log prefix, match length of netcreate output
 const SPC = ' '.repeat(PRE.length);
 /// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-const PORT_ROUTER = 80;
+const DEFAULT_PORT = 80; // default port for the proxy server
 const PORT_APP = 3000; // base port for nc apps
 const PORT_WS = 4000; // base port for websockets
 const DEFAULT_PASSWORD = 'kpop'; // override with SESAME file
@@ -61,6 +61,13 @@ const HEARTBEAT = 15; // Minutes. Number of minutes between memory log heartbeat
 let NVMRC;
 /// command line flags
 const argv = require('minimist')(process.argv.slice(2));
+const argv_port = Number(argv['port'] || argv['p']);
+let port_override;
+if (argv_port && Number.isInteger(argv_port)
+    && argv_port > 0 && argv_port < 65536
+    && (argv_port < PORT_APP || argv_port > PORT_WS + PROCESS_MAX))
+      port_override = argv_port;
+const PORT_ROUTER = port_override || DEFAULT_PORT;
 const IP = argv['ip'];
 /// local data structures
 let m_proxy_pool = []; // array of available port indices, usu [1...100]
@@ -247,8 +254,8 @@ function CookieIsValid(req) {
 
 /// PORT POOLING //////////////////////////////////////////////////////////////
 /// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-/** The proxy server runs on port 80, hosting various management routes as well
- *  as the /graph/<db>/ proxying
+/** The proxy server runs on port 80 by default, hosting various management
+ *  routes as well as the /graph/<db>/ proxying
  *
  *  - Base application port is 3000
  *  - Base websocket port is 4000
@@ -718,6 +725,11 @@ console.log('-'.repeat(80));
 console.log(PRE, 'nc-multiplex started:', m_stat.start);
 console.log(PRE);
 
+if (port_override)
+  console.log(PRE, `${RED}Using port override: ${PORT_ROUTER}${RST}`);
+else
+  console.log(PRE, `${GRN}Using default port: ${PORT_ROUTER}${RST}`);
+
 /// RUNTIME: CHECK FOR BASE REPO //////////////////////////////////////////////
 /// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 const { primary, count } = ScanForRepos();
@@ -862,7 +874,7 @@ async function m_RouterLogic(req) {
     console.log(
       PRE,
       $T(),
-      `>>> proxying request /graph/${route.db}:80 to :${route.port} (client ${req.ip})`
+      `>>> proxying request /graph/${route.db}:${APP_PORT} to :${route.port} (client ${req.ip})`
     );
     port = route.port;
   } else if (PortPoolIsEmpty()) {
