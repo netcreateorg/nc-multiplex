@@ -874,7 +874,7 @@ async function m_RouterLogic(req) {
     console.log(
       PRE,
       $T(),
-      `>>> proxying request /graph/${route.db}:${APP_PORT} to :${route.port} (client ${req.ip})`
+      `>>> proxying request /graph/${route.db}:${PORT_ROUTER} to :${route.port} (client ${req.ip})`
     );
     port = route.port;
   } else if (PortPoolIsEmpty()) {
