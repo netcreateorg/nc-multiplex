@@ -65,7 +65,7 @@ const argv_port = Number(argv['port'] || argv['p']);
 let port_override;
 if (argv_port && Number.isInteger(argv_port)
     && argv_port > 0 && argv_port < 65536
-    && (argv_port < PORT_APP || argv_port > PORT_WS + PROCESS_MAX))
+    && (argv_port < PORT_APP || argv_port > PORT_WS + 999)) // don't allow 3000-4999
       port_override = argv_port;
 const PORT_ROUTER = port_override || DEFAULT_PORT;
 const IP = argv['ip'];
