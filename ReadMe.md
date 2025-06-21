@@ -48,13 +48,14 @@ git clone https://github.com/netcreateorg/netcreate-itest.git
 
 ```
 cd netcreate-itest
+git checkout dev     // if you need to switch to a different branch
 npm ci
 ```
 
-If this is your first run with a newly cloned repo, run Net.Create once to set the initial configuration file and build dependent libraries:
+If this is your first run with a newly cloned repo, you need to create a new project.  Run Net.Create once to set the initial configuration file:
 ```
-cd netcreate-itest
-npm run package
+cd ~/your-dev-folder/nc-multiplex/netcreate-itest/    // if necessary
+./nc.js --dataset=demo
 ```
 
 Check your browser to make sure it's running:
@@ -66,6 +67,7 @@ Then stop the Net.Create application.
 ```
 ctrl-c
 ```
+
 
 #### 3. Compile Net.Create for Classroom
 
@@ -110,12 +112,10 @@ cd ~/your-dev-folder/nc-multiplex
 ```
 
 ***IP Address or Google Analytics Code**  
-Use the optional `--ip` or `--googlea` parameters if you need 
-to start the server with a specific IP address or google
-analytics code. e.g.: 
+Use the optional `--ip` parameters if you need 
+to start the server with a specific IP address. e.g.: 
 
   `node nc-multiplex.js --ip=192.168.1.40`
-  `node nc-multiplex.js --googlea=xxxxx`
       
 See "Caveats" below for more information.
 
@@ -161,25 +161,11 @@ If you're not logged in, you will get an error.
 Shortcut: If you have an active valid cookie, you can just go directly to the URL.
 
 
-#### 10. Generate Tokens
-
-Any user who wants to edit a graph will need to generate a token.  Tokens now only work for specific graphs, so for instance a token for "hawaii" will not allow you to open "tacitus".  To generate tokens, in the "Generate Tokens" box:
-
-1. Select the graph you want to generate tokens for.
-2. Enter a Class ID.  It can be any string.  e.g. you can use this to designate an organization.
-3. Enter a Project ID.  It can be any string.  e.g. you can use this to designate a group.
-4. Select the number of tokens to generate.
-5. Click "Generate Tokens".
-6. Copy the resulting codes.
-
-You can regenerate the same codes any time.
-
-
 ## Managing Databases
 
 All databases are stored in the Net.Create runtime folder, e.g. `~/your-dev-folder/nc-multiplex/netcreate-itest/runtime/`.  All node processes share the same database files.  So any database you spin up will be in the main runtime folder.
 
-* Prepopulate the databases and templates by simply copying the `*.loki` and `*.template` files there prior to running `node nc-multiplex.js`.
+* Prepopulate the databases and templates by simply copying the `*.loki` and `*.template` files there prior to running `./start-nc-multiplex.sh`.
 
 * You can copy and back up databases directly in the `runtime` folder.
 
@@ -226,7 +212,7 @@ To start up:
 	b. `git pull` 
 	c. `npm run package`
 4.  `cd your-dev-folder/nc-mutiplex` 
-5.  `node nc-multiplex.js`
+5.  `/.start-nc-multiplex.sh`
 
 ---
 
@@ -246,10 +232,9 @@ Or you can:
 
 
 ## Startup Parameters
-Use startup parameters to set the ip address or google analytics code:
+Use startup parameters to set the ip address code:
 
 * `--ip` -- e.g. `node nc-multiplex.js --ip=192.168.1.40`.  See "IP option is for private IP networks" below for more details.
-* `--googlea` -- e.g.  `node nc-multiplex.js --googlea=xxxxx`
 
 
 ## Variables
