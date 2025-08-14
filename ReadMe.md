@@ -179,7 +179,9 @@ All databases are stored in the Net.Create runtime folder, e.g. `~/your-dev-fold
 
 * The database named "base" is always started on port 3000 to handle static file requests.  You shouldn't need to touch this graph.
 
-* The default database template used when creating a new project is in `~/your-dev-folder/nc-multiplex/netcreate-itest/app-templates/_default.template`.  You can modify this.
+* The default database template used when creating a new project is in `~/your-dev-folder/nc-multiplex/netcreate-itest/app-templates/_default.template.toml`.  You can modify this.
+
+* The currently running databases are stored in `~/your-dev-folder/nc-multiplex/.nc-process-state.json`. If this file is present, the currently running databases will be reloaded when the server restarts.
 
 
 ## How it works
