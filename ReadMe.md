@@ -214,7 +214,7 @@ To start up:
 	b. `git pull` 
 	c. `npm run package`
 4.  `cd your-dev-folder/nc-mutiplex` 
-5.  `/.start-nc-multiplex.sh`
+5.  `./start-nc-multiplex.sh`
 
 ---
 
