@@ -11,7 +11,7 @@
     If the graph already exists, it will be loaded. Otherwise it will create a new graph.
     You need to be logged into the manager for this to work.
 
-  Manager runs on `http://localhost:80`
+  Manager runs on `http://localhost:80` by default.  Can be overriden with --port=8080
 
   proxied routes
     /                            => localhost:80 Root: NetCreate Manager page
@@ -20,8 +20,7 @@
 
   flags
 
-    node nc-multiplex.js --IP=192.168.1.40
-    node nc-multiplex.js --GOOGLEA=xxxxx
+    node nc-multiplex.js --IP=192.168.1.40 --port=8080
 
 \*\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\\ * /////////////////////////////////////*/
 
@@ -33,8 +32,10 @@ const path = require('path');
 const express = require('express');
 const cookieParser = require('cookie-parser');
 const crypto = require('crypto');
+const archiver = require('archiver');
+
 // session-related imports from netcreate subrepo
-const { NC_SERVER_PATH, NC_URL_CONFIG, ScanForRepos } = require('./nc-launch-config');
+const { NC_SERVER_PATH, NC_RUNTIME_PATH, NC_LOGS_PATH, NC_BACKUPS_PATH, NC_URL_CONFIG, ScanForRepos } = require('./nc-launch-config');
 const SESSION = require(`${NC_SERVER_PATH}/app/unisys/common-session.js`);
 //
 const NCUTILS = require('./modules/nc-utils.js');
@@ -45,7 +46,7 @@ const NCLOG = require('./modules/nc-logging-utils');
 const PRE = 'NC_MUX   -'; // console.log prefix, match length of netcreate output
 const SPC = ' '.repeat(PRE.length);
 /// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-const PORT_ROUTER = 80;
+const DEFAULT_PORT = 80; // default port for the proxy server
 const PORT_APP = 3000; // base port for nc apps
 const PORT_WS = 4000; // base port for websockets
 const DEFAULT_PASSWORD = 'kpop'; // override with SESAME file
@@ -60,7 +61,13 @@ const HEARTBEAT = 15; // Minutes. Number of minutes between memory log heartbeat
 let NVMRC;
 /// command line flags
 const argv = require('minimist')(process.argv.slice(2));
-const GOOGLEA = argv['googlea'];
+const argv_port = Number(argv['port'] || argv['p']);
+let port_override;
+if (argv_port && Number.isInteger(argv_port)
+    && argv_port > 0 && argv_port < 65536
+    && (argv_port < PORT_APP || argv_port > PORT_WS + 999)) // don't allow 3000-4999
+      port_override = argv_port;
+const PORT_ROUTER = port_override || DEFAULT_PORT;
 const IP = argv['ip'];
 /// local data structures
 let m_proxy_pool = []; // array of available port indices, usu [1...100]
@@ -69,6 +76,7 @@ let m_child_processes = []; // array of forked process + meta info = { db, port,
 let HOMEPAGE_EXISTS; // Flag for existence of home.html override
 let PASSWORD; // Either default password or password in `SESAME` file
 let PASSWORD_HASH; // Hash generated from password
+let SERVER_IP; // IP address of server.  Used to tag download filenames.
 /// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 const CYN = '\x1b[96m'; // cyan
 const CYNR = '\x1b[46m'; // reversed cyan
@@ -84,6 +92,20 @@ const { strDateStamp, strTimeStamp } = NCLOG;
 const $T = () => `${strDateStamp()} ${strTimeStamp()}`; // return timestamp string
 
 /// HELPER METHODS ////////////////////////////////////////////////////////////
+/// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+/** return server IP address */
+function m_GetServerIp() {
+  const interfaces = os.networkInterfaces();
+  for (const name of Object.keys(interfaces)) {
+    for (const iface of interfaces[name]) {
+      // Skip over internal (i.e., 127.0.0.1) and non-IPv4 addresses
+      if (iface.family === 'IPv4' && !iface.internal) {
+        return iface.address;
+      }
+    }
+  }
+  return 'localhost'; // fallback
+}
 /// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 /** return memory parameters */
 function m_MemoryReport(unit = 'kb') {
@@ -176,38 +198,39 @@ function m_SendErrorResponse(res, msg) {
 }
 
 /// SESSION OPERATIONS ////////////////////////////////////////////////////////
-/// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-/** Generates a list of tokens using the NetCreate common-session module
- *  REVIEW: Requiring a module from the secondary netcreate-2018 repo
- *  is a little iffy.
- *  @param {string} clsId - classId
- *  @param {string} projId - projectId
- *  @param {string} dataset - database name
- *  @param {integer} numGroups - number of tokens to generate
- *  @return {string}
- */
-function MakeToken(clsId, projId, dataset, numGroups) {
-  // from nc-logic.js
-  if (typeof clsId !== 'string')
-    return 'args: str classId, str projId, str dataset, int numGroups';
-  if (typeof projId !== 'string')
-    return 'args: str classId, str projId, str dataset, int numGroups';
-  if (typeof dataset !== 'string')
-    return 'args: str classId, str projId, str dataset, int numGroups';
-  if (clsId.length > 12) return 'classId arg1 should be 12 chars or less';
-  if (projId.length > 12) return 'classId arg1 should be 12 chars or less';
-  if (!Number.isInteger(numGroups)) return 'numGroups arg3 must be integer';
-  if (numGroups < 1) return 'numGroups arg3 must be positive integer';
+// /// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+// DEPRECATED MakeToken function -- keep in case we need it again
+// /** Generates a list of tokens using the NetCreate common-session module
+//  *  REVIEW: Requiring a module from the secondary netcreate-2018 repo
+//  *  is a little iffy.
+//  *  @param {string} clsId - classId
+//  *  @param {string} projId - projectId
+//  *  @param {string} dataset - database name
+//  *  @param {integer} numGroups - number of tokens to generate
+//  *  @return {string}
+//  */
+// function MakeToken(clsId, projId, dataset, numGroups) {
+//   // from nc-logic.js
+//   if (typeof clsId !== 'string')
+//     return 'args: str classId, str projId, str dataset, int numGroups';
+//   if (typeof projId !== 'string')
+//     return 'args: str classId, str projId, str dataset, int numGroups';
+//   if (typeof dataset !== 'string')
+//     return 'args: str classId, str projId, str dataset, int numGroups';
+//   if (clsId.length > 12) return 'classId arg1 should be 12 chars or less';
+//   if (projId.length > 12) return 'classId arg1 should be 12 chars or less';
+//   if (!Number.isInteger(numGroups)) return 'numGroups arg3 must be integer';
+//   if (numGroups < 1) return 'numGroups arg3 must be positive integer';
 
-  let out = `TOKEN LIST for class '${clsId}' project '${projId}' dataset '${dataset}'\n\n`;
-  let pad = String(numGroups).length;
-  for (let i = 1; i <= numGroups; i++) {
-    let id = String(i);
-    id = id.padStart(pad, '0');
-    out += `group ${id}\t${SESSION.MakeToken(clsId, projId, i, dataset)}\n`;
-  }
-  return out;
-}
+//   let out = `TOKEN LIST for class '${clsId}' project '${projId}' dataset '${dataset}'\n\n`;
+//   let pad = String(numGroups).length;
+//   for (let i = 1; i <= numGroups; i++) {
+//     let id = String(i);
+//     id = id.padStart(pad, '0');
+//     out += `group ${id}\t${SESSION.MakeToken(clsId, projId, i, dataset)}\n`;
+//   }
+//   return out;
+// }
 /// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 /** Used to generate a hashed password for use in the cookie
  *  so that password text is not visible in the cookie.
@@ -231,8 +254,8 @@ function CookieIsValid(req) {
 
 /// PORT POOLING //////////////////////////////////////////////////////////////
 /// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-/** The proxy server runs on port 80, hosting various management routes as well
- *  as the /graph/<db>/ proxying
+/** The proxy server runs on port 80 by default, hosting various management
+ *  routes as well as the /graph/<db>/ proxying
  *
  *  - Base application port is 3000
  *  - Base websocket port is 4000
@@ -338,7 +361,8 @@ function RenderManager() {
   response += `</div>`;
   response += `<div id="forms" style="display: flex">`;
   response += RenderNewGraphForm();
-  response += RenderGenerateTokensForm();
+  response += RenderDownloadLogs();
+  // response += RenderGenerateTokensForm();
   response += `</div>`;
   response += RenderMemoryReport();
   response += `<p><i>page last loaded on: ${m_stat.refreshed.toLocaleTimeString()} <span id='status'></span></i></p >`;
@@ -432,42 +456,57 @@ function RenderNewGraphForm() {
    </div>`;
 }
 /// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-function RenderGenerateTokensForm() {
-  let response = `<div class="box">`;
-  let dbnames = NCUTILS.GetDatabaseNamesArray().reduce(
-    (acc, curr) => acc + "<option value='" + curr + "'>" + curr + '</option>',
-    ''
-  );
-  response += `
-    <script>
-      async function MakeTokens() {
-        console.log('make tokens');
-        const classid = document.getElementById('classid').value;
-        const projid = document.getElementById('projid').value;
-        const count = document.getElementById('count').value;
-        const dataset = document.getElementById('datasets').value;
-        let data = await fetch('./maketoken/'+classid+'/'+projid+'/'+dataset+'/'+count);
-        let result = await data.text();
-        const tokenDisplay = document.getElementById('tokenDisplay');
-        tokenDisplay.value = result;
-      }
-    </script>
-    <h3>Generate Tokens</h3>
-    <div>
-      <p>Select a database, enter a class id, a project id, and number of tokens to generate.  Then click "Generate Tokens".</p>
-      <select id="datasets">
-        ${dbnames}
-      </select>
-      <input id="classid" placeholder="Class ID e.g. 'PER1'">
-      <input id="projid" placeholder="Project ID e.g. 'ROME'">
-      <input id="count" placeholder="Num of tokens e.g. '10'">
-      <button onclick="MakeTokens()">Generate Tokens</button><br/><br/>
-      <textarea id="tokenDisplay" rows="10" cols="80" placeholder="Tokens will appear here..." readonly></textarea>
-    </div>
-  `;
-  response += `</div>`;
-  return response;
+function RenderDownloadLogs() {
+  return `
+    <div class="box">
+      <h3>Download Data</h3>
+      <p>Download data for all graphs for ${SERVER_IP} as a zip file.
+      This includes all data you need to completely restore a droplet
+      (active graphs, loki, templates, logs)
+      </p>
+      <ul>
+        <li><a href="/download_data">All Data</a></li>
+      </ul>
+    </div>`;
 }
+/// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+// DEPRECATED RenderGenerateTokensForm function -- keep in case we need it again
+// function RenderGenerateTokensForm() {
+//   let response = `<div class="box">`;
+//   let dbnames = NCUTILS.GetDatabaseNamesArray().reduce(
+//     (acc, curr) => acc + "<option value='" + curr + "'>" + curr + '</option>',
+//     ''
+//   );
+//   response += `
+//     <script>
+//       async function MakeTokens() {
+//         console.log('make tokens');
+//         const classid = document.getElementById('classid').value;
+//         const projid = document.getElementById('projid').value;
+//         const count = document.getElementById('count').value;
+//         const dataset = document.getElementById('datasets').value;
+//         let data = await fetch('./maketoken/'+classid+'/'+projid+'/'+dataset+'/'+count);
+//         let result = await data.text();
+//         const tokenDisplay = document.getElementById('tokenDisplay');
+//         tokenDisplay.value = result;
+//       }
+//     </script>
+//     <h3>Generate Tokens</h3>
+//     <div>
+//       <p>Select a database, enter a class id, a project id, and number of tokens to generate.  Then click "Generate Tokens".</p>
+//       <select id="datasets">
+//         ${dbnames}
+//       </select>
+//       <input id="classid" placeholder="Class ID e.g. 'PER1'">
+//       <input id="projid" placeholder="Project ID e.g. 'ROME'">
+//       <input id="count" placeholder="Num of tokens e.g. '10'">
+//       <button onclick="MakeTokens()">Generate Tokens</button><br/><br/>
+//       <textarea id="tokenDisplay" rows="10" cols="80" placeholder="Tokens will appear here..." readonly></textarea>
+//     </div>
+//   `;
+//   response += `</div>`;
+//   return response;
+// }
 /// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 function RenderMemoryReport() {
   const { sysUsedMB, sysFreeMB, sysTotalMB, sysPercent } = m_MemoryReport();
@@ -542,7 +581,6 @@ function m_PromiseApp(db) {
           port: ports.appport,
           netport: ports.netport,
           portindex: ports.index,
-          GOOGLEA: GOOGLEA,
           process: forked
         };
         resolve(newProcessDef); // pass to SpawnApp
@@ -561,8 +599,7 @@ function m_PromiseApp(db) {
       port: ports.appport,
       netport: ports.netport,
       process: forked,
-      IP,
-      GOOGLEA
+      IP
     };
     console.log(
       PRE,
@@ -629,7 +666,6 @@ async function LoadProcessState(child_processes, proxy_pool) {
         port,
         netport,
         portindex,
-        GOOGLEA: GOOGLEA,
         process: forked
       };
       forked.send(ncStartParams);
@@ -687,6 +723,11 @@ console.log(`\n\n\n`);
 console.log('-'.repeat(80));
 console.log(PRE, 'nc-multiplex started:', m_stat.start);
 console.log(PRE);
+
+if (port_override)
+  console.log(PRE, `${RED}Using port override: ${PORT_ROUTER}${RST}`);
+else
+  console.log(PRE, `${GRN}Using default port: ${PORT_ROUTER}${RST}`);
 
 /// RUNTIME: CHECK FOR BASE REPO //////////////////////////////////////////////
 /// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -832,7 +873,7 @@ async function m_RouterLogic(req) {
     console.log(
       PRE,
       $T(),
-      `>>> proxying request /graph/${route.db}:80 to :${route.port} (client ${req.ip})`
+      `>>> proxying request /graph/${route.db}:${PORT_ROUTER} to :${route.port} (client ${req.ip})`
     );
     port = route.port;
   } else if (PortPoolIsEmpty()) {
@@ -1034,22 +1075,234 @@ app.get('/kill/:graph/', (req, res) => {
   res.send(response);
 });
 /// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-/// HANDLE "/maketoken" -- GENERATE TOKENS
-app.get('/maketoken/:clsid/:projid/:dataset/:numgroups', (req, res) => {
-  const { clsid, projid, dataset, numgroups } = req.params;
-  console.log(
-    PRE,
-    $T(),
-    'maketoken GET on /maketoken',
-    clsid,
-    projid,
-    dataset,
-    numgroups
+// DEPRECATED RenderGenerateTokensForm function -- keep in case we need it again
+// /// HANDLE "/maketoken" -- GENERATE TOKENS
+// app.get('/maketoken/:clsid/:projid/:dataset/:numgroups', (req, res) => {
+//   const { clsid, projid, dataset, numgroups } = req.params;
+//   console.log(
+//     PRE,
+//     $T(),
+//     'maketoken GET on /maketoken',
+//     clsid,
+//     projid,
+//     dataset,
+//     numgroups
+//   );
+//   let response = MakeToken(clsid, projid, dataset, parseInt(numgroups));
+//   res.set('Content-Type', 'text/html');
+//   res.send(response);
+// });
+/// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+function m_Archive(folderPath, fileExtensions, zipFilename, req, res) {
+  if (!CookieIsValid(req)) {
+      res.redirect(`/error_not_authorized`);
+    return;
+  }
+
+  // Create a zip archive of the folder
+  const archive = archiver('zip', {
+    zlib: { level: 9 } // Compression level
+  });
+
+  archive.on('error', err => {
+    const errmsg = `Error creating zip: ${err.message}`;
+    console.log(PRE, errmsg);
+    m_SendErrorResponse(res, errmsg);
+    return;
+  });
+
+  archive.pipe(res);
+
+  // Add all files from the folder
+  fs.readdir(folderPath, (err, files) => {
+    if (err) {
+      const errmsg = `Error reading folder: ${err.message}`;
+      console.log(PRE, errmsg);
+      m_SendErrorResponse(res, errmsg);
+      return;
+    }
+
+    // Ensure fileExtensions is an array
+    if (!Array.isArray(fileExtensions)) {
+      fileExtensions = [fileExtensions];
+    }
+    // Filter files by the specified extensions and add them to the archive
+    fileExtensions.map(ext => {
+      files.filter(file => file.endsWith(ext)).forEach(file => {
+        const filePath = path.join(folderPath, file);
+        archive.file(filePath, { name: file });
+      });
+    });
+
+    res.setHeader('Content-Disposition', `attachment; filename=${zipFilename}`);
+    res.setHeader('Content-Type', 'application/zip');
+    archive.finalize(); // Finish zipping
+  });
+}
+
+/// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+/// ARCHIVE MULTIPLE DISCRETE FILES AND FOLDERS
+function m_ArchiveMultiple(items, zipFilename, req, res) {
+  if (!CookieIsValid(req)) {
+    console.log(PRE, 'DEBUG: Cookie validation failed');
+    res.redirect(`/error_not_authorized`);
+    return;
+  }
+
+  // Create a zip archive
+  const archive = archiver('zip', {
+    zlib: { level: 9 } // Compression level
+  });
+
+  archive.on('error', err => {
+    const errmsg = `Error creating zip: ${err.message}`;
+    console.log(PRE, errmsg);
+    m_SendErrorResponse(res, errmsg);
+    return;
+  });
+
+  archive.pipe(res);
+
+  // Set response headers
+  res.setHeader('Content-Disposition', `attachment; filename=${zipFilename}`);
+  res.setHeader('Content-Type', 'application/zip');
+
+  // Process each item and add to archive
+  const validItems = items.filter(item => {
+    if (!fs.existsSync(item.path)) {
+      console.log(PRE, `Warning: ${item.path} does not exist, skipping`);
+      return false;
+    }
+    return true;
+  });
+
+  if (validItems.length === 0) {
+    console.log(PRE, 'No valid items to archive');
+    archive.finalize();
+    return;
+  }
+
+  // Add all valid items to the archive
+  validItems.forEach((item) => {
+    const itemPath = item.path;
+    const archiveName = item.name || path.basename(itemPath);
+    const stats = fs.statSync(itemPath);
+
+    if (stats.isFile()) {
+      archive.file(itemPath, { name: archiveName });
+    } else if (stats.isDirectory()) {
+      archive.directory(itemPath, archiveName);
+    } else {
+      console.log(PRE, `Warning: ${itemPath} is neither file nor directory, skipping`);
+    }
+  });
+
+  // Use setImmediate to ensure all archive operations are queued before finalizing
+  setImmediate(() => {
+    console.log(PRE, `Downloading archived data..."${zipFilename}`);
+    archive.finalize();
+  });
+}
+
+// DEPRECATED: Use single file archive instead
+//
+// /// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+// /// HANDLE "/download_all_networks" -- DOWNLOAD LOKI and TEMPLATES
+// app.get('/download_all_networks', (req, res) => {
+//   console.log(PRE, $T(), `GET /download_all_networks (client ${req})`);
+//   const folderPath = path.join(NC_RUNTIME_PATH);
+//   const zipFilename = `netcreate_networks_${SERVER_IP}_${$T()}.zip`;
+//   return m_Archive(
+//     folderPath,
+//     ['.loki', '.template.toml'],
+//     zipFilename,
+//     req,
+//     res
+//   );
+// });
+// /// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+// /// HANDLE "/download_logs" -- DOWNLOAD RESEARCH LOGS
+// app.get('/download_logs', (req, res) => {
+//   console.log(PRE, $T(), `GET /download_logs (client ${req})`);
+//   const folderPath = path.join(NC_LOGS_PATH);
+//   const zipFilename = `netcreate_logs_${SERVER_IP}_${$T()}.zip`;
+//   return m_Archive(
+//     folderPath,
+//     '.txt',
+//     zipFilename,
+//     req,
+//     res
+//   );
+// });
+// /// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+// /// HANDLE "/download_lokis" -- DOWNLOAD RESEARCH LOGS
+// app.get('/download_lokis', (req, res) => {
+//   console.log(PRE, $T(), `GET /download_lokis (client ${req.ip})`);
+//   const folderPath = path.join(NC_RUNTIME_PATH);
+//   const zipFilename = `netcreate_lokis_${SERVER_IP}_${$T()}.zip`;
+//   return m_Archive(
+//     folderPath,
+//     '.loki',
+//     zipFilename,
+//     req,
+//     res
+//   );
+// });
+// /// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+// /// HANDLE "/download_backups" -- DOWNLOAD RESEARCH LOGS
+// app.get('/download_backups', (req, res) => {
+//   console.log(PRE, $T(), `GET /download_backups (client ${req.ip})`);
+//   const folderPath = path.join(NC_BACKUPS_PATH);
+//   const zipFilename = `netcreate_backups_${SERVER_IP}_${$T()}.zip`;
+//   return m_Archive(
+//     folderPath,
+//     '.loki',
+//     zipFilename,
+//     req,
+//     res
+//   );
+// });
+// /// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+// /// HANDLE "/download_templates" -- DOWNLOAD RESEARCH LOGS
+// app.get('/download_templates', (req, res) => {
+//   console.log(PRE, $T(), `GET /download_templates (client ${req.ip})`);
+//   const folderPath = path.join(NC_RUNTIME_PATH);
+//   const zipFilename = `netcreate_templates_${SERVER_IP}_${$T()}.zip`;
+//   return m_Archive(
+//     folderPath,
+//     '.template.toml',
+//     zipFilename,
+//     req,
+//     res
+//   );
+// });
+
+/// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+/// HANDLE "/download_data" -- DOWNLOAD CUSTOM DATA ARCHIVE
+app.get('/download_data', (req, res) => {
+  console.log(PRE, $T(), `GET /download_data (client ${req.ip})`);
+
+  // Define the items to archive - customize this array as needed
+  const itemsToArchive = [
+    // nc-process-state.json -- active graphs
+    { path: '.nc-process-state.json', name: '.nc-process-state.json' },
+    // nc-server-start.txt -- log start time
+    { path: '.nc-server-start.txt', name: '.nc-server-start.txt' },
+    // nc-multiplex log file
+    { path: 'log.txt', name: 'log.txt' },
+    // netcreate-itest/runtime folder - will archive entire folder
+    //   including loki, templates, template backups, loki, backup lokis, logs, etc.
+    { path: NC_RUNTIME_PATH, name: 'runtime' }
+  ];
+  const zipFilename = `netcreate_data_${SERVER_IP}_${$T()}.zip`;
+  return m_ArchiveMultiple(
+    itemsToArchive,
+    zipFilename,
+    req,
+    res
   );
-  let response = MakeToken(clsid, projid, dataset, parseInt(numgroups));
-  res.set('Content-Type', 'text/html');
-  res.send(response);
 });
+
 
 /// EXPRESS MANAGEMENT ROUTES //////////////////////////////////////////////////
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - *\
@@ -1163,8 +1416,9 @@ app.use(
 /// EXPRESS START LISTENING ///////////////////////////////////////////////////
 /// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 app.listen(PORT_ROUTER, () => {
+  SERVER_IP = m_GetServerIp();
   console.log(PRE, $T());
-  console.log(PRE, `NC-MULTIPLEX Express Server running on port ${PORT_ROUTER}.`);
+  console.log(PRE, `NC-MULTIPLEX Express Server running on ${SERVER_IP} port ${PORT_ROUTER}.`);
 
   // if .nc-process-state.json exists, read and parse it
   if (!fs.existsSync('.nc-process-state.json')) {
