@@ -460,13 +460,12 @@ function RenderDownloadLogs() {
   return `
     <div class="box">
       <h3>Download Data</h3>
-      <p>Download data for all graphs for ${SERVER_IP} as a zip file.</p>
+      <p>Download data for all graphs for ${SERVER_IP} as a zip file.
+      This includes all data you need to completely restore a droplet
+      (active graphs, loki, templates, logs)
+      </p>
       <ul>
-        <li><a href="/download_all_networks">All Networks (.loki + .templates.toml)</a></li>
-        <li><a href="/download_logs">All Logs</a></li>
-        <li><a href="/download_lokis">All .loki</a></li>
-        <li><a href="/download_templates">All .template.toml</a></li>
-        <li>(<a href="/download_backups">All Backup .loki</a>)</li>
+        <li><a href="/download_data">All Data</a></li>
       </ul>
     </div>`;
 }
@@ -1140,71 +1139,164 @@ function m_Archive(folderPath, fileExtensions, zipFilename, req, res) {
     archive.finalize(); // Finish zipping
   });
 }
+
 /// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-/// HANDLE "/download_all_networks" -- DOWNLOAD LOKI and TEMPLATES
-app.get('/download_all_networks', (req, res) => {
-  console.log(PRE, $T(), `GET /download_all_networks (client ${req})`);
-  const folderPath = path.join(NC_RUNTIME_PATH);
-  const zipFilename = `netcreate_networks_${SERVER_IP}_${$T()}.zip`;
-  return m_Archive(
-    folderPath,
-    ['.loki', '.template.toml'],
-    zipFilename,
-    req,
-    res
-  );
-});
+/// ARCHIVE MULTIPLE DISCRETE FILES AND FOLDERS
+function m_ArchiveMultiple(items, zipFilename, req, res) {
+  if (!CookieIsValid(req)) {
+    console.log(PRE, 'DEBUG: Cookie validation failed');
+    res.redirect(`/error_not_authorized`);
+    return;
+  }
+
+  // Create a zip archive
+  const archive = archiver('zip', {
+    zlib: { level: 9 } // Compression level
+  });
+
+  archive.on('error', err => {
+    const errmsg = `Error creating zip: ${err.message}`;
+    console.log(PRE, errmsg);
+    m_SendErrorResponse(res, errmsg);
+    return;
+  });
+
+  archive.pipe(res);
+
+  // Set response headers
+  res.setHeader('Content-Disposition', `attachment; filename=${zipFilename}`);
+  res.setHeader('Content-Type', 'application/zip');
+
+  // Process each item and add to archive
+  const validItems = items.filter(item => {
+    if (!fs.existsSync(item.path)) {
+      console.log(PRE, `Warning: ${item.path} does not exist, skipping`);
+      return false;
+    }
+    return true;
+  });
+
+  if (validItems.length === 0) {
+    console.log(PRE, 'No valid items to archive');
+    archive.finalize();
+    return;
+  }
+
+  // Add all valid items to the archive
+  validItems.forEach((item) => {
+    const itemPath = item.path;
+    const archiveName = item.name || path.basename(itemPath);
+    const stats = fs.statSync(itemPath);
+
+    if (stats.isFile()) {
+      archive.file(itemPath, { name: archiveName });
+    } else if (stats.isDirectory()) {
+      archive.directory(itemPath, archiveName);
+    } else {
+      console.log(PRE, `Warning: ${itemPath} is neither file nor directory, skipping`);
+    }
+  });
+
+  // Use setImmediate to ensure all archive operations are queued before finalizing
+  setImmediate(() => {
+    console.log(PRE, `Downloading archived data..."${zipFilename}`);
+    archive.finalize();
+  });
+}
+
+// DEPRECATED: Use single file archive instead
+//
+// /// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+// /// HANDLE "/download_all_networks" -- DOWNLOAD LOKI and TEMPLATES
+// app.get('/download_all_networks', (req, res) => {
+//   console.log(PRE, $T(), `GET /download_all_networks (client ${req})`);
+//   const folderPath = path.join(NC_RUNTIME_PATH);
+//   const zipFilename = `netcreate_networks_${SERVER_IP}_${$T()}.zip`;
+//   return m_Archive(
+//     folderPath,
+//     ['.loki', '.template.toml'],
+//     zipFilename,
+//     req,
+//     res
+//   );
+// });
+// /// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+// /// HANDLE "/download_logs" -- DOWNLOAD RESEARCH LOGS
+// app.get('/download_logs', (req, res) => {
+//   console.log(PRE, $T(), `GET /download_logs (client ${req})`);
+//   const folderPath = path.join(NC_LOGS_PATH);
+//   const zipFilename = `netcreate_logs_${SERVER_IP}_${$T()}.zip`;
+//   return m_Archive(
+//     folderPath,
+//     '.txt',
+//     zipFilename,
+//     req,
+//     res
+//   );
+// });
+// /// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+// /// HANDLE "/download_lokis" -- DOWNLOAD RESEARCH LOGS
+// app.get('/download_lokis', (req, res) => {
+//   console.log(PRE, $T(), `GET /download_lokis (client ${req.ip})`);
+//   const folderPath = path.join(NC_RUNTIME_PATH);
+//   const zipFilename = `netcreate_lokis_${SERVER_IP}_${$T()}.zip`;
+//   return m_Archive(
+//     folderPath,
+//     '.loki',
+//     zipFilename,
+//     req,
+//     res
+//   );
+// });
+// /// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+// /// HANDLE "/download_backups" -- DOWNLOAD RESEARCH LOGS
+// app.get('/download_backups', (req, res) => {
+//   console.log(PRE, $T(), `GET /download_backups (client ${req.ip})`);
+//   const folderPath = path.join(NC_BACKUPS_PATH);
+//   const zipFilename = `netcreate_backups_${SERVER_IP}_${$T()}.zip`;
+//   return m_Archive(
+//     folderPath,
+//     '.loki',
+//     zipFilename,
+//     req,
+//     res
+//   );
+// });
+// /// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+// /// HANDLE "/download_templates" -- DOWNLOAD RESEARCH LOGS
+// app.get('/download_templates', (req, res) => {
+//   console.log(PRE, $T(), `GET /download_templates (client ${req.ip})`);
+//   const folderPath = path.join(NC_RUNTIME_PATH);
+//   const zipFilename = `netcreate_templates_${SERVER_IP}_${$T()}.zip`;
+//   return m_Archive(
+//     folderPath,
+//     '.template.toml',
+//     zipFilename,
+//     req,
+//     res
+//   );
+// });
+
 /// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-/// HANDLE "/download_logs" -- DOWNLOAD RESEARCH LOGS
-app.get('/download_logs', (req, res) => {
-  console.log(PRE, $T(), `GET /download_logs (client ${req})`);
-  const folderPath = path.join(NC_LOGS_PATH);
-  const zipFilename = `netcreate_logs_${SERVER_IP}_${$T()}.zip`;
-  return m_Archive(
-    folderPath,
-    '.txt',
-    zipFilename,
-    req,
-    res
-  );
-});
-/// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-/// HANDLE "/download_lokis" -- DOWNLOAD RESEARCH LOGS
-app.get('/download_lokis', (req, res) => {
-  console.log(PRE, $T(), `GET /download_lokis (client ${req.ip})`);
-  const folderPath = path.join(NC_RUNTIME_PATH);
-  const zipFilename = `netcreate_lokis_${SERVER_IP}_${$T()}.zip`;
-  return m_Archive(
-    folderPath,
-    '.loki',
-    zipFilename,
-    req,
-    res
-  );
-});
-/// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-/// HANDLE "/download_backups" -- DOWNLOAD RESEARCH LOGS
-app.get('/download_backups', (req, res) => {
-  console.log(PRE, $T(), `GET /download_backups (client ${req.ip})`);
-  const folderPath = path.join(NC_BACKUPS_PATH);
-  const zipFilename = `netcreate_backups_${SERVER_IP}_${$T()}.zip`;
-  return m_Archive(
-    folderPath,
-    '.loki',
-    zipFilename,
-    req,
-    res
-  );
-});
-/// - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-/// HANDLE "/download_templates" -- DOWNLOAD RESEARCH LOGS
-app.get('/download_templates', (req, res) => {
-  console.log(PRE, $T(), `GET /download_templates (client ${req.ip})`);
-  const folderPath = path.join(NC_RUNTIME_PATH);
-  const zipFilename = `netcreate_templates_${SERVER_IP}_${$T()}.zip`;
-  return m_Archive(
-    folderPath,
-    '.template.toml',
+/// HANDLE "/download_data" -- DOWNLOAD CUSTOM DATA ARCHIVE
+app.get('/download_data', (req, res) => {
+  console.log(PRE, $T(), `GET /download_data (client ${req.ip})`);
+
+  // Define the items to archive - customize this array as needed
+  const itemsToArchive = [
+    // nc-process-state.json -- active graphs
+    { path: '.nc-process-state.json', name: '.nc-process-state.json' },
+    // nc-server-start.txt -- log start time
+    { path: '.nc-server-start.txt', name: '.nc-server-start.txt' },
+    // nc-multiplex log file
+    { path: 'log.txt', name: 'log.txt' },
+    // netcreate-itest/runtime folder - will archive entire folder
+    //   including loki, templates, template backups, loki, backup lokis, logs, etc.
+    { path: NC_RUNTIME_PATH, name: 'runtime' }
+  ];
+  const zipFilename = `netcreate_data_${SERVER_IP}_${$T()}.zip`;
+  return m_ArchiveMultiple(
+    itemsToArchive,
     zipFilename,
     req,
     res
